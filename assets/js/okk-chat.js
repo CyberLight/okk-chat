@@ -12,6 +12,7 @@
 
     var doc = document.querySelector('link#okk-chat-template[rel="import"]').import;
     appendTemplate(doc, "chat-template");
+    appendTemplate(doc, "chat-template-min");
     appendTemplate(doc, "message-template");
     appendTemplate(doc, "message-response-template");
 

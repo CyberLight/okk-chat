@@ -227,7 +227,8 @@ body {
     list-style: none;
 }
 
-.msg-badge {
+.msg-badge,
+.clients-badge {
     display: inline-block;
     min-width: 10px;
     padding: 3px 7px;
@@ -283,3 +284,54 @@ body {
     color: #fea400;
 }
 
+.hidden {
+    display: none;
+}
+
+
+.chat-container.min-container .msg-count {
+    width: 30%;
+    float: left;
+    height: 50px;
+    padding: 5px;
+}
+
+.chat-container.min-container .chat-info {
+    background: #F2F5F8;
+    width: 70%;
+    float: left;
+    height: 50px;
+    color: gray;
+    position: relative;
+    padding-left: 10px;
+    line-height: 2.7em;
+    font-size: 18px;
+}
+
+.chat-container.min-container .bg-online{
+    background-color: #86BB71;
+}
+
+.chat-container.min-container .bg-offline{
+    background-color: red;
+}
+
+.chat-container.min-container {
+    height: 50px;
+    width: 400px;
+}
+
+.chat-container.min-container .center-text {
+    text-align: center;
+}
+
+.chat-container.min-container .maximize-icon {
+    position: absolute;
+    right: 0;
+    padding: 7px;
+    color: #D8DADF;
+}
+
+.chat-container.min-container .maximize-icon:hover {
+    color:inherit;
+}
