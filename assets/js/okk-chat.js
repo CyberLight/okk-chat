@@ -13,12 +13,14 @@
     var doc = document.querySelector('link#okk-chat-template[rel="import"]').import;
     appendTemplate(doc, "chat-template");
     appendTemplate(doc, "chat-template-min");
-    appendTemplate(doc, "message-template");
-    appendTemplate(doc, "message-response-template");
-    appendTemplate(doc, "message-typing-template");
+    appendTemplate(doc, "chat-message-template");
+    appendTemplate(doc, "chat-message-response-template");
+    appendTemplate(doc, "chat-message-typing-template");
     appendTemplate(doc, "chat-header-template");
     appendTemplate(doc, "chat-history-template");
     appendTemplate(doc, "chat-footer-template");
+    appendTemplate(doc, "chat-auth-progress-template");
+    appendTemplate(doc, "chat-people-template");
 
     var chat = {
         messageResponses: [
@@ -29,14 +31,25 @@
             'What is the object-oriented way to become wealthy? Inheritance.',
             'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
         ],
+        states: {
+          'Auth': ShowAuthChatState,
+          'Chat': ShowMessagesState
+        },
         init: function () {
-            this.currentState = new ShowMessagesState(chat);
+            this.currentState = new this.states['Auth'](chat); //new ShowMessagesState(chat);
             this.cacheDOM();
             this.bindEvents();
             this.render();
         },
+        changeState: function(name){
+            chat.currentState = new chat.states[name](chat);
+            chat.cacheDOM();
+            chat.bindEvents();
+            chat.render();
+        },
         cacheDOM: function () {
             this.$chat = $('.chat');
+            this.$peoples = $('.people-list');
             this.currentState.cacheDOM(this);
         },
         bindEvents: function () {
@@ -75,6 +88,55 @@
     };
 
     searchFilter.init();
+
+    function ShowAuthChatState(chat) {
+        var self = this;
+        self.chat = chat;
+        self.working = false;
+
+        self.loginBtnClick = function(event){
+            if(self.working) return false;
+            self.working = true;
+            self.chat.$peoples.hide();
+            var $state = self.chat.$chat.find('button > .state');
+            self.$wrapper.addClass('loading');
+            $state.html('Authenticating');
+
+            setTimeout(function() {
+                self.$wrapper.addClass('ok');
+                $state.html('Welcome back!');
+                setTimeout(function() {
+                    $state.html('Log in');
+                    self.$wrapper.removeClass('ok loading');
+                    self.working = false;
+                    self.chat.$peoples.show();
+                    self.chat.changeState('Chat');
+                }, 4000); //4000
+            }, 5000); //3000
+        };
+
+        function cacheDOM(){
+            var progressTpl = Handlebars.compile($("#chat-auth-progress-template").html());
+            self.chat.$peoples.hide();
+            self.chat.$chat.html('');
+            self.chat.$chat.append(progressTpl());
+
+            self.$loginBtn = self.chat.$chat.find('.login-btn');
+            self.$wrapper = self.chat.$chat.find('.wrapper');
+        }
+
+        function bindEvents(){
+            self.$loginBtn.on('click', self.loginBtnClick.bind(self));
+        }
+
+        function render () { }
+
+        return {
+            cacheDOM: cacheDOM,
+            bindEvents: bindEvents,
+            render: render
+        }
+    }
 
     function ShowMessagesState(chat) {
         var self = this;
@@ -121,7 +183,7 @@
         function render () {
             self.scrollToBottom();
             if (self.messageToSend.trim() !== '') {
-                var template = Handlebars.compile($("#message-template").html());
+                var template = Handlebars.compile($("#chat-message-template").html());
                 var context = {
                     messageOutput: self.messageToSend,
                     time: self.chat.getCurrentTime()
@@ -132,7 +194,7 @@
                 self.$textarea.val('');
 
                 // responses
-                var templateResponse = Handlebars.compile($("#message-response-template").html());
+                var templateResponse = Handlebars.compile($("#chat-message-response-template").html());
                 var contextResponse = {
                     response: self.chat.getRandomItem(chat.messageResponses),
                     time: self.chat.getCurrentTime()

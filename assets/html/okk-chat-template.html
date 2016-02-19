@@ -126,7 +126,7 @@
     </div>
 </div>
 
-<script id="message-template" type="text/x-handlebars-template">
+<script id="chat-message-template" type="text/x-handlebars-template">
     <li class="clearfix">
         <div class="message-data align-right">
             <span class="message-data-time">{{time}}, Today</span> &nbsp; &nbsp;
@@ -142,7 +142,7 @@
     </li>
 </script>
 
-<script id="message-response-template" type="text/x-handlebars-template">
+<script id="chat-message-response-template" type="text/x-handlebars-template">
     <li>
         <div class="message-data">
             <span class="message-data-name"><i class="fa fa-circle online"></i> {{phone}}</span>
@@ -154,7 +154,7 @@
     </li>
 </script>
 
-<script id="message-typing-template" type="text/x-handlebars-template">
+<script id="chat-message-typing-template" type="text/x-handlebars-template">
     <li>
         <div class="message-data">
             <span class="message-data-name"><i class="fa fa-circle online"></i> {{phone}}</span>
@@ -194,3 +194,30 @@
     </div> <!-- end chat-history -->
 </script>
 
+<script id="chat-auth-progress-template" type="text/x-handlebars-template">
+    <div class="wrapper">
+        <button class="login-btn">
+            <i class="chat-spinner"></i>
+            <span class="state">Log in</span>
+        </button>
+    </div>
+</script>
+
+<script id="chat-people-template" type="text/x-handlebars-template">
+    {{#if active}}
+        <li class="clearfix active">
+    {{ else }}
+        <li class="clearfix">
+    {{/if}}
+        <!--<img src="https://s3-us-west-2.amazonaws.com/s.cdpn.io/195612/chat_avatar_01.jpg" alt="avatar"/>-->
+        <div class="about">
+            <div class="name">{{phone}}</div>
+            <div class="status">
+                <i class="fa fa-circle online"></i> {{status}}
+            </div>
+            <div class="msg-unread">
+                <i class="msg-badge unread">{{unread}}</i>
+            </div>
+        </div>
+    </li>
+</script>
