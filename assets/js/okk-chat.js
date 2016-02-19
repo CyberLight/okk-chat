@@ -15,9 +15,12 @@
     appendTemplate(doc, "chat-template-min");
     appendTemplate(doc, "message-template");
     appendTemplate(doc, "message-response-template");
+    appendTemplate(doc, "message-typing-template");
+    appendTemplate(doc, "chat-header-template");
+    appendTemplate(doc, "chat-history-template");
+    appendTemplate(doc, "chat-footer-template");
 
     var chat = {
-        messageToSend: '',
         messageResponses: [
             'Why did the web developer leave the restaurant? Because of the table layout.',
             'How do you comfort a JavaScript bug? You console it.',
@@ -27,62 +30,23 @@
             'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
         ],
         init: function () {
+            this.currentState = new ShowMessagesState(chat);
             this.cacheDOM();
             this.bindEvents();
             this.render();
         },
         cacheDOM: function () {
-            this.$chatHistory = $('.chat-history');
-            this.$button = $('button');
-            this.$textarea = $('#message-to-send');
-            this.$chatHistoryList = this.$chatHistory.find('ul');
+            this.$chat = $('.chat');
+            this.currentState.cacheDOM(this);
         },
         bindEvents: function () {
-            this.$button.on('click', this.addMessage.bind(this));
-            this.$textarea.on('keyup', this.addMessageEnter.bind(this));
+            this.currentState.bindEvents(this);
         },
+
         render: function () {
-            this.scrollToBottom();
-            if (this.messageToSend.trim() !== '') {
-                var template = Handlebars.compile($("#message-template").html());
-                var context = {
-                    messageOutput: this.messageToSend,
-                    time: this.getCurrentTime()
-                };
-
-                this.$chatHistoryList.append(template(context));
-                this.scrollToBottom();
-                this.$textarea.val('');
-
-                // responses
-                var templateResponse = Handlebars.compile($("#message-response-template").html());
-                var contextResponse = {
-                    response: this.getRandomItem(this.messageResponses),
-                    time: this.getCurrentTime()
-                };
-
-                setTimeout(function () {
-                    this.$chatHistoryList.append(templateResponse(contextResponse));
-                    this.scrollToBottom();
-                }.bind(this), 1500);
-
-            }
-
+            this.currentState.render(this);
         },
 
-        addMessage: function () {
-            this.messageToSend = this.$textarea.val();
-            this.render();
-        },
-        addMessageEnter: function (event) {
-            // enter was pressed
-            if (event.keyCode === 13) {
-                this.addMessage();
-            }
-        },
-        scrollToBottom: function () {
-            this.$chatHistory.scrollTop(this.$chatHistory[0].scrollHeight);
-        },
         getCurrentTime: function () {
             return new Date().toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
         },
@@ -112,6 +76,81 @@
 
     searchFilter.init();
 
+    function ShowMessagesState(chat) {
+        var self = this;
+        self.chat = chat;
+        self.messageToSend = '';
+
+        self.addMessage = function() {
+            self.messageToSend = self.$textarea.val();
+            render();
+        };
+
+        self.addMessageEnter = function (event) {
+            // enter was pressed
+            if (event.keyCode === 13) {
+                self.addMessage();
+            }
+        };
+
+        self.scrollToBottom = function () {
+            self.$chatHistory.scrollTop(self.$chatHistory[0].scrollHeight);
+        };
+
+        function cacheDOM(){
+            var headerTpl = Handlebars.compile($("#chat-header-template").html());
+            var historyTpl = Handlebars.compile($("#chat-history-template").html());
+            var footerTpl = Handlebars.compile($("#chat-footer-template").html());
+
+            self.chat.$chat.html('');
+            self.chat.$chat.append(headerTpl({phone: '+996555123123', messagesCount: 1234}));
+            self.chat.$chat.append(historyTpl());
+            self.chat.$chat.append(footerTpl());
+
+            self.$chatHistory = self.chat.$chat.find('.chat-history');
+            self.$button = self.chat.$chat.find('button');
+            self.$textarea = self.chat.$chat.find('#message-to-send');
+            self.$chatHistoryList = self.$chatHistory.find('ul');
+        }
+
+        function bindEvents(){
+            self.$button.on('click', self.addMessage.bind(self));
+            self.$textarea.on('keyup', self.addMessageEnter.bind(self));
+        }
+
+        function render () {
+            self.scrollToBottom();
+            if (self.messageToSend.trim() !== '') {
+                var template = Handlebars.compile($("#message-template").html());
+                var context = {
+                    messageOutput: self.messageToSend,
+                    time: self.chat.getCurrentTime()
+                };
+
+                self.$chatHistoryList.append(template(context));
+                self.scrollToBottom();
+                self.$textarea.val('');
+
+                // responses
+                var templateResponse = Handlebars.compile($("#message-response-template").html());
+                var contextResponse = {
+                    response: self.chat.getRandomItem(chat.messageResponses),
+                    time: self.chat.getCurrentTime()
+                };
+
+                setTimeout(function () {
+                    this.$chatHistoryList.append(templateResponse(contextResponse));
+                    this.scrollToBottom();
+                }.bind(self), 1500);
+            }
+        }
+
+        return {
+            cacheDOM: cacheDOM,
+            bindEvents: bindEvents,
+            render: render
+        }
+    }
 
 })();
 
