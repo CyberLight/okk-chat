@@ -21,6 +21,7 @@
     appendTemplate(doc, "chat-footer-template");
     appendTemplate(doc, "chat-auth-progress-template");
     appendTemplate(doc, "chat-people-template");
+    appendTemplate(doc, "chat-no-conversation-template");
 
     var chat = {
         messageResponses: [
@@ -32,11 +33,12 @@
             'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
         ],
         states: {
-          'Auth': ShowAuthChatState,
-          'Chat': ShowMessagesState
+          'Auth'           : ShowAuthChatState,
+          'Chat'           : ShowMessagesState,
+          'NoConversation' : NoConversationChatState
         },
         init: function () {
-            this.currentState = new this.states['Auth'](chat); //new ShowMessagesState(chat);
+            this.currentState = new this.states['Auth'](chat);
             this.cacheDOM();
             this.bindEvents();
             this.render();
@@ -138,6 +140,31 @@
         }
     }
 
+    function NoConversationChatState(chat) {
+        var self = this;
+        self.chat = chat;
+
+        function cacheDOM(){
+            var noConversationTpl = Handlebars.compile($("#chat-no-conversation-template").html());
+            self.chat.$chat.html('');
+            self.chat.$chat.append(noConversationTpl());
+        }
+
+        function bindEvents(){
+
+        }
+
+        function render () {
+
+        }
+
+        return {
+            cacheDOM: cacheDOM,
+            bindEvents: bindEvents,
+            render: render
+        }
+    }
+
     function ShowMessagesState(chat) {
         var self = this;
         self.chat = chat;
@@ -146,6 +173,10 @@
         self.addMessage = function() {
             self.messageToSend = self.$textarea.val();
             render();
+        };
+
+        self.addPeople = function(){
+
         };
 
         self.addMessageEnter = function (event) {
@@ -163,6 +194,7 @@
             var headerTpl = Handlebars.compile($("#chat-header-template").html());
             var historyTpl = Handlebars.compile($("#chat-history-template").html());
             var footerTpl = Handlebars.compile($("#chat-footer-template").html());
+            var peopleTpl = Handlebars.compile($("#chat-people-template").html());
 
             self.chat.$chat.html('');
             self.chat.$chat.append(headerTpl({phone: '+996555123123', messagesCount: 1234}));
