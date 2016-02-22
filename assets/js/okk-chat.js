@@ -2,7 +2,7 @@
  * Created by avishnyakov on 2/17/16.
  */
 
-(function () {
+(function (window) {
 
     function appendTemplate(doc, templateId) {
         var container = doc.getElementById(templateId);
@@ -23,6 +23,7 @@
     appendTemplate(doc, "chat-people-template");
     appendTemplate(doc, "chat-no-conversation-template");
     appendTemplate(doc, "chat-message-reply-template");
+    appendTemplate(doc, "chat-unread-template");
 
     var chat = {
         messageResponses: [
@@ -38,14 +39,20 @@
           'Chat'           : ShowMessagesState,
           'NoConversation' : NoConversationChatState
         },
+
+        contactStates: {
+          'Chat': PeoplestState
+        },
+
         init: function () {
-            this.currentState = new this.states['Chat'](chat);
+            this.chatState = new this.states['Chat'](chat);
+            this.contactState = new this.contactStates['Chat'](chat);
             this.cacheDOM();
             this.bindEvents();
             this.render();
         },
         changeState: function(name){
-            chat.currentState = new chat.states[name](chat);
+            chat.chatState = new chat.states[name](chat);
             chat.cacheDOM();
             chat.bindEvents();
             chat.render();
@@ -53,14 +60,18 @@
         cacheDOM: function () {
             this.$chat = $('.chat');
             this.$peoples = $('.people-list');
-            this.currentState.cacheDOM(this);
+            this.$peopleList = this.$peoples.find('.list');
+            this.chatState.cacheDOM(this);
+            this.contactState.cacheDOM(this);
         },
         bindEvents: function () {
-            this.currentState.bindEvents(this);
+            this.chatState.bindEvents(this);
+            this.contactState.bindEvents(this);
         },
 
         render: function () {
-            this.currentState.render(this);
+            this.contactState.render(this);
+            this.chatState.render(this);
         },
 
         getCurrentTime: function () {
@@ -170,6 +181,7 @@
         var self = this;
         self.chat = chat;
         self.messageToSend = '';
+        self.hasUnreadMessages = true;
 
         self.addMessage = function() {
             var msg = {
@@ -179,10 +191,6 @@
                 message: self.$textarea.val()
             };
             render(msg);
-        };
-
-        self.addPeople = function(){
-
         };
 
         self.addRepliedMessage = function(){
@@ -199,6 +207,16 @@
             if (event.keyCode === 13) {
                 self.addMessage();
             }
+        };
+
+        self.showChatUnreadMark = function(){
+            var unreadTpl = Handlebars.compile($("#chat-unread-template").html());
+            var context = {
+                count: 12,
+                time: self.chat.getCurrentTime()
+            };
+            this.$chatHistoryList.append(unreadTpl(context));
+            this.scrollToBottom();
         };
 
         self.scrollToBottom = function () {
@@ -254,6 +272,11 @@
                 };
 
                 setTimeout(function () {
+                    //TODO: For imitation unread process
+                    if(self.hasUnreadMessages){
+                        self.showChatUnreadMark();
+                    }
+
                     this.$chatHistoryList.append(templateResponse(contextResponse));
                     this.scrollToBottom();
                 }.bind(self), 1500);
@@ -267,5 +290,53 @@
         }
     }
 
-})();
+    function PeoplestState(chat){
+        var self = this;
+        self.chat = chat;
+        self.peoples = [];
+        self.guid = function() {
+            function s4() {
+                return Math.floor((1 + Math.random()) * 0x10000)
+                    .toString(16)
+                    .substring(1);
+            }
+            return s4() + s4() + '-' + s4() + '-' + s4() + '-' +
+                s4() + '-' + s4() + s4() + s4();
+        };
+
+        self.addPeople = function(people){
+            people.id = self.guid();
+            self.peoples.push(people);
+            self.chat.$peopleList.append(self.peopleTpl(people));
+        };
+
+        self.render = function() {
+            var num = 100;
+            for(var p=0; p<10; p++){
+                var people = {
+                    phone: '+996555123'+num,
+                    statusText: 'online',
+                    status: 'online'
+                };
+                num++;
+                self.addPeople(people);
+            }
+        };
+
+        self.cacheDOM = function(){
+            self.peopleTpl = Handlebars.compile($("#chat-people-template").html());
+        };
+
+        self.bindEvents = function(){
+
+        };
+
+        return {
+            render: self.render,
+            cacheDOM: self.cacheDOM,
+            bindEvents: self.bindEvents
+        }
+    }
+
+})(window);
 

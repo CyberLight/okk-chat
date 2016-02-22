@@ -457,3 +457,16 @@ body {
     border-bottom-color: #92959e;
     left: 93%;
 }
+
+.chat .messages-unread {
+    border-bottom: red 1px solid;
+    padding: 10px 0 0;
+    margin-bottom: 10px;
+}
+
+.chat .messages-unread .mark {
+    padding: 2px 7px;
+    color: white;
+    background-color: red;
+    border-radius: 10px 10px 0 0;
+}
