@@ -439,3 +439,21 @@ body {
     color: #d8dadf;
     height: 446px;
 }
+
+.chat .message-resolved {
+    border-bottom: dashed 2px #92959e;
+    margin-bottom: 15px;
+}
+
+.chat .green-icon {
+    color: #8bc34a;
+}
+
+.chat .message-resolved .other-message {
+    background: #92959e;
+}
+
+.chat .message-resolved .other-message:after {
+    border-bottom-color: #92959e;
+    left: 93%;
+}

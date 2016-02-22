@@ -137,7 +137,19 @@
             {{/if}}
         </div>
         <div class="message other-message float-right">
-            {{messageOutput}}
+            {{message}}
+        </div>
+    </li>
+</script>
+
+<script id="chat-message-reply-template" type="text/x-handlebars-template">
+    <li class="clearfix message-resolved">
+        <div class="message-data align-right">
+            <span class="message-data-time">{{time}}, Today</span> &nbsp; &nbsp;
+            <span class="message-data-name">{{name}}<i class="msg-badge">operator</i></span> <i class="fa fa-circle me"></i>
+        </div>
+        <div class="message other-message float-right">
+            <i class="fa fa-check-circle green-icon"></i> {{message}}
         </div>
     </li>
 </script>
@@ -183,7 +195,8 @@
         <textarea name="message-to-send" id="message-to-send" placeholder="Type your message" rows="3"></textarea>
         <i class="fa fa-file-o"></i> &nbsp;&nbsp;&nbsp;
         <i class="fa fa-file-image-o"></i>
-        <button><i class="fa fa-paper-plane-o"></i>&nbsp;&nbsp;send</button>
+        <button class="btn-send"><i class="fa fa-paper-plane-o"></i>&nbsp;&nbsp;send</button>
+        <button class="btn-replied"><i class="fa fa-comments"></i>&nbsp;&nbsp;End</button>
     </div> <!-- end chat-message -->
 </script>
 

@@ -22,6 +22,7 @@
     appendTemplate(doc, "chat-auth-progress-template");
     appendTemplate(doc, "chat-people-template");
     appendTemplate(doc, "chat-no-conversation-template");
+    appendTemplate(doc, "chat-message-reply-template");
 
     var chat = {
         messageResponses: [
@@ -38,7 +39,7 @@
           'NoConversation' : NoConversationChatState
         },
         init: function () {
-            this.currentState = new this.states['Auth'](chat);
+            this.currentState = new this.states['Chat'](chat);
             this.cacheDOM();
             this.bindEvents();
             this.render();
@@ -171,12 +172,26 @@
         self.messageToSend = '';
 
         self.addMessage = function() {
-            self.messageToSend = self.$textarea.val();
-            render();
+            var msg = {
+                type:'regular',
+                name: 'Elena',
+                operator: true,
+                message: self.$textarea.val()
+            };
+            render(msg);
         };
 
         self.addPeople = function(){
 
+        };
+
+        self.addRepliedMessage = function(){
+            var msg = {
+                type:'reply',
+                name: 'Elena',
+                message: 'End of conversation'
+            };
+            render(msg);
         };
 
         self.addMessageEnter = function (event) {
@@ -202,26 +217,32 @@
             self.chat.$chat.append(footerTpl());
 
             self.$chatHistory = self.chat.$chat.find('.chat-history');
-            self.$button = self.chat.$chat.find('button');
+            self.$button = self.chat.$chat.find('button.btn-send');
+            self.$buttonReply = self.chat.$chat.find('button.btn-replied');
             self.$textarea = self.chat.$chat.find('#message-to-send');
             self.$chatHistoryList = self.$chatHistory.find('ul');
         }
 
         function bindEvents(){
             self.$button.on('click', self.addMessage.bind(self));
+            self.$buttonReply.on('click', self.addRepliedMessage.bind(self));
             self.$textarea.on('keyup', self.addMessageEnter.bind(self));
         }
 
-        function render () {
+        function render (msg) {
             self.scrollToBottom();
-            if (self.messageToSend.trim() !== '') {
-                var template = Handlebars.compile($("#chat-message-template").html());
-                var context = {
-                    messageOutput: self.messageToSend,
-                    time: self.chat.getCurrentTime()
-                };
+            if (msg.message && msg.message.trim() !== '') {
 
-                self.$chatHistoryList.append(template(context));
+                var template = '';
+                if(msg.type == 'regular') {
+                    template = Handlebars.compile($("#chat-message-template").html());
+                }else if(msg.type == 'reply'){
+                    template = Handlebars.compile($("#chat-message-reply-template").html());
+                }
+
+                msg.time = self.chat.getCurrentTime();
+
+                self.$chatHistoryList.append(template(msg));
                 self.scrollToBottom();
                 self.$textarea.val('');
 
