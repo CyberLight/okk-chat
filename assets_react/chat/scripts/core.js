@@ -120,6 +120,11 @@ var OutgoingMessage = React.createClass({
 });
 
 var HeaderBox = React.createClass({
+    closeClicked: function(e){
+        if(typeof this.props.onClose == 'function') {
+            this.props.onClose();
+        }
+    },
     render: function() {
         return (
             <div className="chat-header clearfix">
@@ -131,7 +136,7 @@ var HeaderBox = React.createClass({
                         messages
                     </div>
                 </div>
-                <IconButton classes="fa fa-times header-icon"/>
+                <IconButton onClick={this.closeClicked} classes="fa fa-times header-icon"/>
                 <IconButton classes="fa fa-minus-square header-icon"/>
             </div>
         );
@@ -151,7 +156,7 @@ var EmptyHeaderBox = React.createClass({
 var IconButton = React.createClass({
     render: function() {
         return (
-            <i className={this.props.classes}></i>
+            <i onClick={this.props.onClick || function(){}} className={this.props.classes}></i>
         );
     }
 });
@@ -201,16 +206,44 @@ var HistoryBox = React.createClass({
 });
 
 var Contact = React.createClass({
+    getInitialState: function() {
+        return {
+            data: this.props.data || {},
+            active: false
+        }
+    },
+
+    activateContact: function(){
+        if(typeof this.props.onActivate == 'function'){
+            this.props.onActivate(this.state.data);
+        }
+    },
+    getUnreadMessageCount: function(){
+        if(this.state.data.unread || 0 > 0) {
+            return (
+                <i className="msg-badge unread">{this.state.data.unread || 0}</i>
+            )
+        }
+        return '';
+    },
+    clientActive: function(){
+        var contact = this.state.data;
+        if(this.props.selectedId == contact.id){
+            return ' active';
+        }
+        return '';
+    },
     render: function() {
         return (
-            <li className="clearfix">
+            <li className={"clearfix" + this.clientActive() }  onClick={this.activateContact}>
                 <div className="about">
-                    <div className="name">+996555000000</div>
+                    <div className="name">{this.state.data.tel || '+000000000000'}</div>
                     <div className="status">
-                        <i className="fa fa-circle online"></i> online
+                        <i className={"fa fa-circle " + this.state.data.status || 'offline' }></i>
+                        {this.state.data.status || 'offline'}
                     </div>
                     <div className="msg-unread">
-                        <i className="msg-badge unread">12</i>
+                        {this.getUnreadMessageCount()}
                     </div>
                 </div>
             </li>
@@ -219,17 +252,37 @@ var Contact = React.createClass({
 });
 
 var ContactsListBox = React.createClass({
+    getInitialState: function() {
+        return {
+            selectedId: '',
+            selectedContact: {}
+        }
+    },
+    onActivateContact: function(contact){
+        this.setState({
+            selectedId: contact.id,
+            selectedContact: contact
+        });
+
+        if(typeof this.props.onSelectContact == 'function') {
+            this.props.onSelectContact(contact);
+        }
+    },
     render: function() {
+        var selectedId = this.state.selectedId;
+        var onActivateContact = this.onActivateContact;
         return (
             <ul className="list">
-                <Contact/>
-                <Contact/>
-                <Contact/>
-                <Contact/>
-                <Contact/>
-                <Contact/>
-                <Contact/>
-                <Contact/>
+                {
+                    this.props.items.map(function(contact){
+                        return (
+                            <Contact key={contact.id}
+                                     data={contact}
+                                     selectedId={selectedId}
+                                     onActivate={onActivateContact}/>
+                        )
+                    })
+                }
             </ul>
         );
     }
@@ -251,17 +304,22 @@ var ContactsBox = React.createClass({
         return (
             <div className="people-list" id="people-list">
                 <ContactSearchBox/>
-                <ContactsListBox/>
+                <ContactsListBox items={this.props.contacts} onSelectContact={this.props.onSelectClient}/>
             </div>
         );
     }
 });
 
 var ConversationBox = React.createClass({
+    onClose: function(){
+        if(typeof this.props.onClose == 'function'){
+            this.props.onClose();
+        }
+    },
     render: function() {
         return (
             <div className="chat">
-                <HeaderBox/>
+                <HeaderBox onClose={this.onClose}/>
                 <HistoryBox/>
                 <FooterBox/>
             </div>
@@ -281,17 +339,47 @@ var EmptyConversationBox = React.createClass({
 });
 
 var LoginBox = React.createClass({
+    getInitialState: function() {
+        return {loginState: this.props.initialLoginState || 'login'};
+    },
+    progressState: function(){
+        this.setState({
+            loginState: 'progress'
+        });
+    },
+    successState: function(){
+        this.setState({
+            loginState: 'success'
+        });
+    },
+    tryAgainState: function(){
+        this.setState({
+            loginState: 'login'
+        });
+    },
+    authenticateOperator: function(){
+        setTimeout(function() {
+            this.successState();
+            setTimeout(function() {
+                if(typeof this.props.onAuthSuccess == 'function') {
+                    this.props.onAuthSuccess();
+                }
+            }.bind(this), 4000); //4000
+        }.bind(this), 5000); //3000
+    },
+    loginClick: function(e){
+        this.progressState();
+        this.authenticateOperator();
+    },
     renderState: function(){
-        switch(this.props.loginState || 'login'){
+        switch(this.state.loginState){
             case 'login':
                 return (
-                    <div className="chat">
-                        <div className="wrapper">
-                            <button className="login-btn">
-                                <i className="chat-spinner"></i>
-                                <span className="state">Log in</span>
-                            </button>
-                        </div>
+                    <div className="wrapper">
+                        <button className="login-btn" onClick={this.loginClick}>
+                            <i className="chat-spinner"></i>
+                            <span className="state">Log in</span>
+                        </button>
                     </div>
                 );
             case 'progress':
@@ -316,7 +404,11 @@ var LoginBox = React.createClass({
         }
     },
     render: function() {
-        return this.renderState();
+        return (
+            <div className="chat">
+                {this.renderState()}
+            </div>
+        )
     }
 });
 
@@ -332,25 +424,82 @@ var EmptyChatBox = React.createClass({
 });
 
 var ChatBox = React.createClass({
+    getInitialState: function() {
+        return {
+            clearContacts: false,
+            chatState: this.props.initialChatState || 'login',
+            contacts: []
+        };
+    },
+    authSuccess: function(){
+        this.setState({
+            chatState: 'no-chat',
+            contacts: [
+                {
+                    id: 1,
+                    tel: '+996555111222',
+                    status: 'online'
+                },
+                {
+                    id: 2,
+                    tel: '+996255111223',
+                    status: 'offline'
+                },
+                {
+                    id: 3,
+                    tel: '+996355111224',
+                    status: 'online'
+                },
+                {
+                    id: 4,
+                    tel: '+996455111225',
+                    status: 'offline'
+                },
+                {
+                    id: 5,
+                    tel: '+996655111226',
+                    status: 'online'
+                },
+                {
+                    id: 6,
+                    tel: '+996755111227',
+                    status: 'online'
+                }
+            ]
+        });
+    },
+    selectClient: function(client){
+        this.setState({
+            chatState: 'chat',
+            currentClient: client
+        });
+    },
+    onConverationClose: function(){
+        console.log('onConverationClose: ');
+        this.setState({
+            chatState: 'no-chat',
+            currentClient: {}
+        });
+    },
     renderState: function(){
-        switch(this.props.chatState || 'login'){
+        switch(this.state.chatState || 'login'){
             case 'login':
                 return (
                     <div id="chat-template" className="chat-container clearfix">
-                        <LoginBox/>
+                        <LoginBox onAuthSuccess={this.authSuccess}/>
                     </div>
                 );
             case 'chat':
                 return (
                     <div id="chat-template" className="chat-container clearfix">
-                        <ContactsBox/>
-                        <ConversationBox/>
+                        <ContactsBox contacts={this.state.contacts} onSelectClient={this.selectClient}/>
+                        <ConversationBox onClose={this.onConverationClose} client={this.state.currentClient}/>
                     </div>
                 );
             case 'no-chat':
                 return (
                     <div id="chat-template" className="chat-container clearfix">
-                        <ContactsBox/>
+                        <ContactsBox  contacts={this.state.contacts} onSelectClient={this.selectClient}/>
                         <EmptyConversationBox/>
                     </div>
                 )
