@@ -45,7 +45,7 @@
         },
 
         init: function () {
-            this.chatState = new this.states['Chat'](chat);
+            this.chatState = new this.states['Auth'](chat);
             this.contactState = new this.contactStates['Chat'](chat);
             this.cacheDOM();
             this.bindEvents();
