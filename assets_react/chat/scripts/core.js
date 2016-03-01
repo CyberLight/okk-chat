@@ -122,6 +122,26 @@ var Global = {
             ]}
 };
 
+var CoreUtils = {
+    padLeft: function(num, base,chr){
+        var  len = (String(base || 10).length - String(num).length)+1;
+        return len > 0? new Array(len).join(chr || '0')+num : num;
+    },
+    formatDate: function(d){
+        return [
+                d.getFullYear(),
+                CoreUtils.padLeft(d.getMonth() + 1),
+                CoreUtils.padLeft(d.getDate())].join('-') +
+            ' ' + [
+                CoreUtils.padLeft(d.getHours()),
+                CoreUtils.padLeft(d.getMinutes()),
+                CoreUtils.padLeft(d.getSeconds())
+            ].join(':');
+    },
+    getMessageId: function(messages){
+        return messages.length > 0 ? messages[messages.length-1].id+1 : 1;
+    }
+};
 
 var TypingMessage = React.createClass({
     render: function() {
@@ -300,16 +320,40 @@ var HistoryButton = React.createClass({
 });
 
 var FooterBox = React.createClass({
+    getInitialState: function() {
+        return {
+            value: ''
+        };
+    },
+    sendMessage: function(e){
+        if(typeof this.props.onMessage == 'function'){
+            this.props.onMessage({
+                message: this.state.value
+            });
+            this.setState({ value: '' });
+        }
+    },
+    handleChange: function(event){
+        this.setState({value: event.target.value});
+    },
+    handleKeyUp: function(event){
+        if (event.keyCode === 13) {
+            this.sendMessage();
+        }
+    },
     render: function() {
         return (
             <div className="chat-message clearfix">
                 <textarea name="message-to-send"
                           id="message-to-send"
                           placeholder="Type your message"
-                          rows="3"></textarea>
+                          value={this.state.value}
+                          onChange={this.handleChange}
+                          onKeyUp={this.handleKeyUp}
+                          rows="3"/>
                 <IconButton classes="fa fa-file-o"/>&nbsp;&nbsp;&nbsp;
                 <IconButton classes="fa fa-file-image-o"/>
-                <HistoryButton title="send" icons="fa fa-paper-plane-o" classes="btn-send"/>
+                <HistoryButton onClick={this.sendMessage} title="send" icons="fa fa-paper-plane-o" classes="btn-send"/>
                 <HistoryButton title="end" icons="fa fa-comments" classes="btn-replied"/>
             </div>
         );
@@ -465,12 +509,17 @@ var ConversationBox = React.createClass({
             this.props.onClose();
         }
     },
+    onOutMessage: function(message){
+        if (typeof this.props.onOutgoingMessage == 'function'){
+            this.props.onOutgoingMessage(message);
+        }
+    },
     render: function() {
         return (
             <div className="chat">
                 <HeaderBox contact={this.props.contact} count={this.props.messages.length} onClose={this.onClose}/>
                 <HistoryBox contact={this.props.contact} messages={this.props.messages}/>
-                <FooterBox/>
+                <FooterBox onMessage={this.onOutMessage}/>
             </div>
         );
     }
@@ -578,7 +627,10 @@ var ChatBox = React.createClass({
             chatState: this.props.initialChatState || 'login',
             contacts: [],
             messages: [],
-            currentContact: {}
+            currentContact: {},
+            operator: {
+                name: 'Ксения Оператор'
+            }
         };
     },
     loadContacts: function(){
@@ -612,6 +664,25 @@ var ChatBox = React.createClass({
             currentContact: {}
         });
     },
+    onOutgoingMessage: function(data){
+        var messages = this.state.messages;
+        var operator = this.state.operator;
+
+        var message = {
+            id: CoreUtils.getMessageId(messages),
+            name: operator.name,
+            message: data.message,
+            contentType: 'text',
+            msgType: 'out',
+            operator: true,
+            datetime: CoreUtils.formatDate(new Date())
+        };
+
+        var newMessages = messages.concat([message]);
+        this.setState({
+           messages: newMessages
+        });
+    },
     renderState: function(){
         switch(this.state.chatState || 'login'){
             case 'login':
@@ -626,7 +697,8 @@ var ChatBox = React.createClass({
                         <ContactsBox contacts={this.state.contacts} onSelectClient={this.selectClient}/>
                         <ConversationBox contact={this.state.currentContact}
                                          messages={this.state.messages}
-                                         onClose={this.onConversationClose}/>
+                                         onClose={this.onConversationClose}
+                                         onOutgoingMessage={this.onOutgoingMessage}/>
                     </div>
                 );
             case 'no-chat':
