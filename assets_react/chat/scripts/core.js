@@ -1,4 +1,4 @@
-var Global = {
+var GlobalChatData = {
     contacts: [
         {
             id: 1,
@@ -311,7 +311,7 @@ var IconButton = React.createClass({
 var HistoryButton = React.createClass({
     render: function() {
         return (
-            <button className={this.props.classes}>
+            <button onClick={this.props.onClick} className={this.props.classes}>
                 <i className={this.props.icons}></i>
                 &nbsp;&nbsp;{this.props.title || ''}
             </button>
@@ -635,12 +635,14 @@ var ChatBox = React.createClass({
     },
     loadContacts: function(){
         this.setState({
-            contacts: Global.contacts
+            contacts: this.state.contacts.length
+                ? this.state.contacts
+                : GlobalChatData.contacts
         });
     },
     loadMessages: function(contact){
         this.setState({
-            messages: Global.messages[contact.name] || []
+            messages: GlobalChatData.messages[contact.name] || []
         });
     },
     authSuccess: function(){
@@ -664,6 +666,10 @@ var ChatBox = React.createClass({
             currentContact: {}
         });
     },
+    cacheMessage: function(messages){
+        var contact = this.state.currentContact;
+        GlobalChatData.messages[contact.name] = messages;
+    },
     onOutgoingMessage: function(data){
         var messages = this.state.messages;
         var operator = this.state.operator;
@@ -682,6 +688,7 @@ var ChatBox = React.createClass({
         this.setState({
            messages: newMessages
         });
+        this.cacheMessage(newMessages);
     },
     renderState: function(){
         switch(this.state.chatState || 'login'){
