@@ -1,3 +1,128 @@
+var Global = {
+    contacts: [
+        {
+            id: 1,
+            name: '+996555111222',
+            status: 'online'
+        },
+        {
+            id: 2,
+            name: '+996255111223',
+            status: 'offline'
+        },
+        {
+            id: 3,
+            name: '+996355111224',
+            status: 'online'
+        },
+        {
+            id: 4,
+            name: '+996455111225',
+            status: 'offline'
+        },
+        {
+            id: 5,
+            name: '+996655111226',
+            status: 'online'
+        },
+        {
+            id: 6,
+            name: '+996755111227',
+            status: 'online'
+        }
+    ],
+
+    messages: {
+            '+996555111222': [
+                {
+                    id:1,
+                    name: '+996555111222',
+                    contentType: 'text',
+                    message: 'Message #1',
+                    msgType: 'in',
+                    operator: false,
+                    datetime: '2016-03-01 10:10:10'
+                },
+                {
+                    id:2,
+                    name: 'Ксения',
+                    contentType: 'text',
+                    message: 'Message from operator #1',
+                    msgType: 'out',
+                    operator: true,
+                    datetime: '2016-03-01 10:11:10'
+                }
+            ],
+            '+996255111223': [
+                {
+                    id:1,
+                    name: '+996255111223',
+                    contentType: 'text',
+                    message: 'Message #2',
+                    msgType: 'in',
+                    operator: false,
+                    datetime: '2016-03-01 09:11:10'
+                },
+                {
+                    id:2,
+                    name: 'Ксения',
+                    contentType: 'text',
+                    message: 'Message from operator #2',
+                    msgType: 'out',
+                    operator: true,
+                    datetime: '2016-03-01 10:03:10'
+                },
+                {
+                    id:3,
+                    name: '+996255111223',
+                    contentType: 'text',
+                    message: 'Message #2',
+                    msgType: 'in',
+                    operator: false,
+                    datetime: '2016-03-01 10:05:07'
+                }
+            ],
+            '+996355111224': [
+                {
+                    id:1,
+                    name: '+996355111224',
+                    contentType: 'text',
+                    message: 'Message #3',
+                    msgType: 'in',
+                    operator: false,
+                    datetime: '2016-03-01 08:10:09'
+                },
+                {
+                    id:2,
+                    name: 'Ксения',
+                    contentType: 'text',
+                    message: 'Message from operator #3',
+                    msgType: 'out',
+                    operator: true,
+                    datetime: '2016-03-01 09:08:10'
+                },
+                {
+                    id:3,
+                    name: '+996355111224',
+                    contentType: 'text',
+                    message: 'Message #3',
+                    msgType: 'in',
+                    operator: false,
+                    datetime: '2016-03-01 10:11:10'
+                },
+                {
+                    id:4,
+                    name: '+996355111224',
+                    contentType: 'text',
+                    message: 'Message #3 ....',
+                    msgType: 'in',
+                    operator: false,
+                    datetime: '2016-03-01 11:12:10'
+                }
+            ]}
+};
+
+
 var TypingMessage = React.createClass({
     render: function() {
         var getCurrentTime = function () {
@@ -60,8 +185,9 @@ var UnreadMessageDelimeter = React.createClass({
 
 var IncomingMessage = React.createClass({
     render: function() {
-        var getCurrentTime = function () {
-            return new Date().toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        var getCurrentTime = function (dt) {
+            var resultDate = new Date(dt) || new Date();
+            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
         };
 
         return (
@@ -69,14 +195,14 @@ var IncomingMessage = React.createClass({
                 <div className="message-data">
                     <span className="message-data-name">
                         <i className={"fa fa-circle " + (this.props.status || 'offline')}></i>
-                        {this.props.phone || 'Not specified'}
+                        {this.props.data.name || 'Not specified'}
                     </span>
                     <span className="message-data-time">
-                        {this.props.time || getCurrentTime()}, {this.props.days || 'Today'}
+                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
                     </span>
                 </div>
                 <div className="message my-message">
-                    {this.props.message || 'Empty message'}
+                    {this.props.data.message || 'Empty message'}
                 </div>
             </li>
         );
@@ -85,7 +211,7 @@ var IncomingMessage = React.createClass({
 
 var OutgoingMessage = React.createClass({
     operatorStatus: function () {
-        if (this.props.operator) {
+        if (this.props.data.operator) {
             return (
                 <i className="msg-badge">operator</i>
             );
@@ -94,25 +220,26 @@ var OutgoingMessage = React.createClass({
         }
     },
     render: function() {
-        var getCurrentTime = function () {
-            return new Date().toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        var getCurrentTime = function (dt) {
+            var resultDate = new Date(dt) || new Date();
+            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
         };
 
         return (
             <li className="clearfix">
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {this.props.time || getCurrentTime()}, {this.props.days || 'Today'}
+                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
-                        {this.props.senderName || 'Empty sender'}
+                        {this.props.data.name || 'Empty sender'}
                         {this.operatorStatus()}
                     </span>
                     &nbsp;&nbsp;
                     <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
                 <div className="message other-message float-right">
-                    {this.props.message || 'Empty message'}
+                    {this.props.data.message || 'Empty message'}
                 </div>
             </li>
         );
@@ -129,10 +256,10 @@ var HeaderBox = React.createClass({
         return (
             <div className="chat-header clearfix">
                 <div className="chat-about">
-                    <div className="chat-with"> Chat with: {this.props.phone || ''}</div>
+                    <div className="chat-with"> Chat with: {this.props.contact.name || ''}</div>
                     <div className="chat-num-messages">
                         already
-                        <i className="msg-badge">{this.props.messagesCount || 0}</i>
+                        <i className="msg-badge">{this.props.count || 0}</i>
                         messages
                     </div>
                 </div>
@@ -190,15 +317,32 @@ var FooterBox = React.createClass({
 });
 
 var HistoryBox = React.createClass({
+    renderMessage: function(message){
+        switch(message.msgType){
+            case 'in':
+                return (
+                    <IncomingMessage key={message.id} data={message}/>
+                );
+            case 'out':
+                return (
+                    <OutgoingMessage key={message.id} data={message}/>
+                )
+        }
+    },
+    componentDidUpdate: function() {
+        var node = ReactDOM.findDOMNode(this);
+        node.scrollTop = node.scrollHeight;
+    },
     render: function() {
+        var renderMessage = this.renderMessage;
         return (
             <div className="chat-history">
                 <ul className="chat-history-messages">
-                    <OutgoingMessage operator="true" />
-                    <UnreadMessageDelimeter/>
-                    <IncomingMessage/>
-                    <EndConversationMessage/>
-                    <TypingMessage/>
+                    {
+                        this.props.messages.map(function(message){
+                            return renderMessage(message)
+                        })
+                    }
                 </ul>
             </div>
         );
@@ -237,7 +381,7 @@ var Contact = React.createClass({
         return (
             <li className={"clearfix" + this.clientActive() }  onClick={this.activateContact}>
                 <div className="about">
-                    <div className="name">{this.state.data.tel || '+000000000000'}</div>
+                    <div className="name">{this.state.data.name || '+000000000000'}</div>
                     <div className="status">
                         <i className={"fa fa-circle " + this.state.data.status || 'offline' }></i>
                         {this.state.data.status || 'offline'}
@@ -319,8 +463,8 @@ var ConversationBox = React.createClass({
     render: function() {
         return (
             <div className="chat">
-                <HeaderBox onClose={this.onClose}/>
-                <HistoryBox/>
+                <HeaderBox contact={this.props.contact} count={this.props.messages.length} onClose={this.onClose}/>
+                <HistoryBox messages={this.props.messages}/>
                 <FooterBox/>
             </div>
         );
@@ -364,8 +508,8 @@ var LoginBox = React.createClass({
                 if(typeof this.props.onAuthSuccess == 'function') {
                     this.props.onAuthSuccess();
                 }
-            }.bind(this), 4000); //4000
-        }.bind(this), 5000); //3000
+            }.bind(this), 1000); //4000
+        }.bind(this), 1500); //3000
     },
     loginClick: function(e){
         this.progressState();
@@ -426,59 +570,41 @@ var EmptyChatBox = React.createClass({
 var ChatBox = React.createClass({
     getInitialState: function() {
         return {
-            clearContacts: false,
             chatState: this.props.initialChatState || 'login',
-            contacts: []
+            contacts: [],
+            messages: [],
+            currentContact: {}
         };
+    },
+    loadContacts: function(){
+        this.setState({
+            contacts: Global.contacts
+        });
+    },
+    loadMessages: function(contact){
+        this.setState({
+            messages: Global.messages[contact.name] || []
+        });
     },
     authSuccess: function(){
         this.setState({
-            chatState: 'no-chat',
-            contacts: [
-                {
-                    id: 1,
-                    tel: '+996555111222',
-                    status: 'online'
-                },
-                {
-                    id: 2,
-                    tel: '+996255111223',
-                    status: 'offline'
-                },
-                {
-                    id: 3,
-                    tel: '+996355111224',
-                    status: 'online'
-                },
-                {
-                    id: 4,
-                    tel: '+996455111225',
-                    status: 'offline'
-                },
-                {
-                    id: 5,
-                    tel: '+996655111226',
-                    status: 'online'
-                },
-                {
-                    id: 6,
-                    tel: '+996755111227',
-                    status: 'online'
-                }
-            ]
+            chatState: 'no-chat'
         });
+        this.loadContacts();
     },
     selectClient: function(client){
         this.setState({
             chatState: 'chat',
-            currentClient: client
+            currentContact: client,
+            messages: []
         });
+        this.loadMessages(client);
     },
-    onConverationClose: function(){
-        console.log('onConverationClose: ');
+    onConversationClose: function(){
         this.setState({
             chatState: 'no-chat',
-            currentClient: {}
+            messages:[],
+            currentContact: {}
         });
     },
     renderState: function(){
@@ -493,7 +619,9 @@ var ChatBox = React.createClass({
                 return (
                     <div id="chat-template" className="chat-container clearfix">
                         <ContactsBox contacts={this.state.contacts} onSelectClient={this.selectClient}/>
-                        <ConversationBox onClose={this.onConverationClose} client={this.state.currentClient}/>
+                        <ConversationBox contact={this.state.currentContact}
+                                         messages={this.state.messages}
+                                         onClose={this.onConversationClose}/>
                     </div>
                 );
             case 'no-chat':
