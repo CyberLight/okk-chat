@@ -318,14 +318,19 @@ var FooterBox = React.createClass({
 
 var HistoryBox = React.createClass({
     renderMessage: function(message){
+        var contact = this.props.contact;
         switch(message.msgType){
             case 'in':
                 return (
-                    <IncomingMessage key={message.id} data={message}/>
+                    <IncomingMessage key={message.id}
+                                     data={message}
+                                     status={contact.status} />
                 );
             case 'out':
                 return (
-                    <OutgoingMessage key={message.id} data={message}/>
+                    <OutgoingMessage key={message.id}
+                                     data={message}
+                                     status={contact.status}/>
                 )
         }
     },
@@ -464,7 +469,7 @@ var ConversationBox = React.createClass({
         return (
             <div className="chat">
                 <HeaderBox contact={this.props.contact} count={this.props.messages.length} onClose={this.onClose}/>
-                <HistoryBox messages={this.props.messages}/>
+                <HistoryBox contact={this.props.contact} messages={this.props.messages}/>
                 <FooterBox/>
             </div>
         );
