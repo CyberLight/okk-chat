@@ -1,126 +1,327 @@
-var GlobalChatData = {
-    contacts: [
-        {
-            id: 1,
-            name: '+996555111222',
-            status: 'online'
-        },
-        {
-            id: 2,
-            name: '+996255111223',
-            status: 'offline'
-        },
-        {
-            id: 3,
-            name: '+996355111224',
-            status: 'online'
-        },
-        {
-            id: 4,
-            name: '+996455111225',
-            status: 'offline'
-        },
-        {
-            id: 5,
-            name: '+996655111226',
-            status: 'online'
-        },
-        {
-            id: 6,
-            name: '+996755111227',
-            status: 'online'
-        }
-    ],
+var ChatDispatcher = new Flux.Dispatcher();
 
-    messages: {
-            '+996555111222': [
-                {
-                    id:1,
-                    name: '+996555111222',
-                    contentType: 'text',
-                    message: 'Message #1',
-                    msgType: 'in',
-                    operator: false,
-                    datetime: '2016-03-01 10:10:10'
-                },
-                {
-                    id:2,
-                    name: 'Ксения',
-                    contentType: 'text',
-                    message: 'Message from operator #1',
-                    msgType: 'out',
-                    operator: true,
-                    datetime: '2016-03-01 10:11:10'
-                }
-            ],
-            '+996255111223': [
-                {
-                    id:1,
-                    name: '+996255111223',
-                    contentType: 'text',
-                    message: 'Message #2',
-                    msgType: 'in',
-                    operator: false,
-                    datetime: '2016-03-01 09:11:10'
-                },
-                {
-                    id:2,
-                    name: 'Ксения',
-                    contentType: 'text',
-                    message: 'Message from operator #2',
-                    msgType: 'out',
-                    operator: true,
-                    datetime: '2016-03-01 10:03:10'
-                },
-                {
-                    id:3,
-                    name: '+996255111223',
-                    contentType: 'text',
-                    message: 'Message #2',
-                    msgType: 'in',
-                    operator: false,
-                    datetime: '2016-03-01 10:05:07'
-                }
-            ],
-            '+996355111224': [
-                {
-                    id:1,
-                    name: '+996355111224',
-                    contentType: 'text',
-                    message: 'Message #3',
-                    msgType: 'in',
-                    operator: false,
-                    datetime: '2016-03-01 08:10:09'
-                },
-                {
-                    id:2,
-                    name: 'Ксения',
-                    contentType: 'text',
-                    message: 'Message from operator #3',
-                    msgType: 'out',
-                    operator: true,
-                    datetime: '2016-03-01 09:08:10'
-                },
-                {
-                    id:3,
-                    name: '+996355111224',
-                    contentType: 'text',
-                    message: 'Message #3',
-                    msgType: 'in',
-                    operator: false,
-                    datetime: '2016-03-01 10:11:10'
-                },
-                {
-                    id:4,
-                    name: '+996355111224',
-                    contentType: 'text',
-                    message: 'Message #3 ....',
-                    msgType: 'in',
-                    operator: false,
-                    datetime: '2016-03-01 11:12:10'
-                }
-            ]}
+var _lastMessageId = 1;
+//TODO: clear after testing
+var _messages = {
+    'c_1': {
+        messages:[],
+        lastMessage: {
+            isRead: false
+        }
+    },
+    'c_2': {
+        messages:[],
+        lastMessage: {
+            isRead: false
+        }
+    },
+    'c_3': {
+        messages:[],
+        lastMessage: {
+            isRead: false
+        }
+    },
+    'c_4': {
+        messages:[],
+        lastMessage: {
+            isRead: false
+        }
+    },
+    'c_5': {
+        messages:[],
+        lastMessage: {
+            isRead: false
+        }
+    },
+    'c_6': {
+        messages:[],
+        lastMessage: {
+            isRead: false
+        }
+    }
 };
+//TODO: clear after testing
+var _contactsIds = {
+    '+996555111222': 'c_1',
+    '+996255111223': 'c_2',
+    '+996355111224': 'c_3',
+    '+996455111225': 'c_4',
+    '+996655111226': 'c_5',
+    '+996755111227': 'c_6'
+};
+//TODO: clear after testing
+var _contacts = [
+    {
+        id: 'c_1',
+        name: '+996555111222',
+        status: 'online'
+    },
+    {
+        id: 'c_2',
+        name: '+996255111223',
+        status: 'offline'
+    },
+    {
+        id: 'c_3',
+        name: '+996355111224',
+        status: 'online'
+    },
+    {
+        id: 'c_4',
+        name: '+996455111225',
+        status: 'offline'
+    },
+    {
+        id: 'c_5',
+        name: '+996655111226',
+        status: 'online'
+    },
+    {
+        id: 'c_6',
+        name: '+996755111227',
+        status: 'online'
+    }
+];
+
+/*============================ Constants =================================*/
+var ChatConstants = {
+    CONTACT_CHANGE_EVENT: 'CONTACT_CHANGED_EVENT',
+    MESSAGE_CHANGE_EVENT: 'MESSAGE_CHANGED_EVENT'
+};
+
+var ActionTypes = {
+    CLICK_CONTACT: 'CLICK_CONTACT',
+    RECEIVE_RAW_MESSAGES: 'RECEIVE_RAW_MESSAGES',
+    NEW_OUT_MESSAGE: 'NEW_OUT_MESSAGE',
+    NEW_IN_MESSAGE: 'NEW_IN_MESSAGE'
+};
+
+
+
+/*============================ Store =================================*/
+var UnreadChatMessageStore = objectAssign({}, EventEmitter.prototype, {
+
+    emitChange: function() {
+        this.emit(ChatConstants.MESSAGE_CHANGE_EVENT);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    addChangeListener: function(callback) {
+        this.on(ChatConstants.MESSAGE_CHANGE_EVENT, callback);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    removeChangeListener: function(callback) {
+        this.removeListener(ChatConstants.MESSAGE_CHANGE_EVENT, callback);
+    },
+
+    getAllCount: function() {
+        var messages = ChatMessageStore.getAll();
+        var unreadCount = 0;
+        for (var id in messages) {
+            if (!messages[id].lastMessage.isRead) {
+                unreadCount++;
+            }
+        }
+        return unreadCount;
+    },
+    getCount: function(id) {
+        var messages = ChatMessageStore.getMessages(id);
+        var unreadCount = 0;
+        for (var i=0, len=messages.length; i<len; i++) {
+            if (!messages[i].isRead) {
+                unreadCount++;
+            }
+        }
+        return unreadCount;
+    }
+
+});
+
+var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
+    init: function(rawMessages){
+        _messages = rawMessages;
+    },
+    getAll: function(){
+        return _messages;
+    },
+    getMessages: function(id){
+        var MessageStoreItem = {
+            messages:[],
+            lastMessage: {
+                read: false
+            }
+        };
+        if(!_messages[id]){
+            _messages[id] = MessageStoreItem;
+        }
+        return _messages[id].messages;
+    },
+
+    emitChange: function() {
+        this.emit(ChatConstants.MESSAGE_CHANGE_EVENT);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    addChangeListener: function(callback) {
+        this.on(ChatConstants.MESSAGE_CHANGE_EVENT, callback);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    removeChangeListener: function(callback) {
+        this.removeListener(ChatConstants.MESSAGE_CHANGE_EVENT, callback);
+    },
+
+    addOutMessage: function(info){
+        _lastMessageId++;
+        var message = {
+            id: 'm_' + _lastMessageId,
+            name: info.operator.name,
+            message: info.data.message,
+            contentType: info.type,
+            msgType: 'out',
+            operator: true,
+            datetime: CoreUtils.formatDate(new Date()),
+            isRead: true
+        };
+        _messages[info.contact.id].messages.push(message);
+        this.emitChange();
+    }
+});
+
+var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
+    getAll: function(){
+        return _contacts;
+    },
+
+    emitChange: function() {
+        this.emit(ChatConstants.CONTACT_CHANGE_EVENT);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    addChangeListener: function(callback) {
+        this.on(ChatConstants.CONTACT_CHANGE_EVENT, callback);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    removeChangeListener: function(callback) {
+        this.removeListener(ChatConstants.CONTACT_CHANGE_EVENT, callback);
+    },
+
+    getId: function(name){
+        return _contactsIds[name];
+    }
+});
+
+/*============================ Dispatchers =================================*/
+
+ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
+    var message = null;
+    switch(action.type) {
+        case ActionTypes.NEW_OUT_MESSAGE:
+            message = CoreUtils.createOutMessageFromRaw(
+                action.message,
+                action.sender,
+                action.receiver,
+                action.msgType
+            );
+            _messages[action.receiver.id].messages.push(message);
+            ChatMessageStore.emitChange();
+            break;
+        case ActionTypes.NEW_IN_MESSAGE:
+            message = CoreUtils.createInMessageFromRaw(
+                action.message,
+                action.sender,
+                action.receiver,
+                action.msgType,
+                action.datetime
+            );
+            var id = ChatContactsStore.getId(action.sender);
+            _messages[id].messages.push(message);
+            ChatMessageStore.emitChange();
+            break;
+
+        case ActionTypes.CLICK_CONTACT:
+            _messages[action.contactId].lastMessage.isRead = true;
+            ChatMessageStore.emitChange();
+            break;
+
+        case ActionTypes.RECEIVE_RAW_MESSAGES:
+            ChatMessageStore.init(action.rawMessages);
+            ChatMessageStore.emitChange();
+            break;
+
+        default:
+        // do nothing
+    }
+
+});
+
+
+UnreadChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
+    ChatDispatcher.waitFor([
+        ChatMessageStore.dispatchToken
+    ]);
+
+    switch (action.type) {
+        case ActionTypes.CLICK_CONTACT:
+            UnreadChatMessageStore.emitChange();
+            break;
+
+        case ActionTypes.RECEIVE_RAW_MESSAGES:
+            UnreadChatMessageStore.emitChange();
+            break;
+
+        default:
+        // do nothing
+    }
+});
+
+/*============================= Actions ==============================*/
+
+var OutgoingMessageAction = {
+    createMessage: function (message, sender, receiver, msgType) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.NEW_OUT_MESSAGE,
+            message: message,
+            sender: sender,
+            receiver: receiver,
+            msgType: msgType
+        });
+        var msg = CoreUtils.createOutMessageFromRaw(
+            message, sender, receiver, msgType);
+        //Отправка на сервер
+    }
+};
+
+var IncomingMessageAction = {
+    createMessage: function (message, sender, receiver, msgType) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.NEW_IN_MESSAGE,
+            message: message,
+            sender: sender,
+            receiver: receiver,
+            msgType: msgType
+        });
+        var msg = CoreUtils.createInMessageFromRaw(
+            message, sender, receiver, msgType);
+        //Отправка на сервер
+    }
+};
+
+/*============================= Utils ==============================*/
 
 var CoreUtils = {
     padLeft: function(num, base,chr){
@@ -138,10 +339,36 @@ var CoreUtils = {
                 CoreUtils.padLeft(d.getSeconds())
             ].join(':');
     },
-    getMessageId: function(messages){
-        return messages.length > 0 ? messages[messages.length-1].id+1 : 1;
+    createOutMessageFromRaw: function(message, sender, receiver, msgType){
+        _lastMessageId++;
+        return {
+            id: 'm_' + _lastMessageId,
+            name: sender.name,
+            message: message,
+            contentType: msgType,
+            msgType: 'out',
+            operator: true,
+            datetime: CoreUtils.formatDate(new Date()),
+            isRead: true
+        };
+    },
+
+    createInMessageFromRaw: function(message, sender, receiver, msgType, datetime){
+        _lastMessageId++;
+        return {
+            id: 'm_' + _lastMessageId,
+            name: sender,
+            message: message,
+            contentType: msgType,
+            msgType: 'in',
+            operator: false,
+            datetime: CoreUtils.formatDate(new Date(datetime)),
+            isRead: false
+        };
     }
 };
+
+/*=============================== React ================================*/
 
 var TypingMessage = React.createClass({
     render: function() {
@@ -326,12 +553,18 @@ var FooterBox = React.createClass({
         };
     },
     sendMessage: function(e){
-        if(typeof this.props.onMessage == 'function'){
-            this.props.onMessage({
-                message: this.state.value
-            });
-            this.setState({ value: '' });
-        }
+        //if(typeof this.props.onMessage == 'function'){
+        //    this.props.onMessage({
+        //        message: this.state.value
+        //    });
+        //}
+        OutgoingMessageAction.createMessage(
+            this.state.value,
+            this.props.operator,
+            this.props.contact,
+            'text'
+        );
+        this.setState({ value: '' });
     },
     handleChange: function(event){
         this.setState({value: event.target.value});
@@ -402,8 +635,24 @@ var Contact = React.createClass({
     getInitialState: function() {
         return {
             data: this.props.data || {},
-            active: false
+            active: false,
+            unread: 0
         }
+    },
+
+    componentDidMount: function() {
+        UnreadChatMessageStore.addChangeListener(this._onUnreadChange);
+    },
+
+    componentWillUnmount: function() {
+        UnreadChatMessageStore.removeChangeListener(this._onUnreadChange);
+    },
+
+    _onUnreadChange: function(){
+        var unread = UnreadChatMessageStore.getCount(this.state.data.id);
+        this.setState({
+            unread: unread
+        });
     },
 
     activateContact: function(){
@@ -519,7 +768,7 @@ var ConversationBox = React.createClass({
             <div className="chat">
                 <HeaderBox contact={this.props.contact} count={this.props.messages.length} onClose={this.onClose}/>
                 <HistoryBox contact={this.props.contact} messages={this.props.messages}/>
-                <FooterBox onMessage={this.onOutMessage}/>
+                <FooterBox operator={this.props.operator} contact={this.props.contact} onMessage={this.onOutMessage}/>
             </div>
         );
     }
@@ -630,19 +879,39 @@ var ChatBox = React.createClass({
             currentContact: {},
             operator: {
                 name: 'Ксения Оператор'
-            }
+            },
+            unread: 0
         };
     },
+
+    componentDidMount: function() {
+        ChatMessageStore.addChangeListener(this._onMessagesChange);
+        UnreadChatMessageStore.addChangeListener(this._onUnreadChange);
+    },
+
+    componentWillUnmount: function() {
+        ChatMessageStore.removeChangeListener(this._onMessagesChange);
+        UnreadChatMessageStore.removeChangeListener(this._onUnreadChange);
+    },
+
+    _onUnreadChange: function(){
+        this.setState({
+            unreadAll: UnreadChatMessageStore.getAllCount()
+        });
+    },
+
+    _onMessagesChange: function(){
+        this.loadMessages(this.state.currentContact);
+    },
+
     loadContacts: function(){
         this.setState({
-            contacts: this.state.contacts.length
-                ? this.state.contacts
-                : GlobalChatData.contacts
+            contacts: ChatContactsStore.getAll()
         });
     },
     loadMessages: function(contact){
         this.setState({
-            messages: GlobalChatData.messages[contact.name] || []
+            messages: ChatMessageStore.getMessages(contact.id)
         });
     },
     authSuccess: function(){
@@ -650,6 +919,8 @@ var ChatBox = React.createClass({
             chatState: 'no-chat'
         });
         this.loadContacts();
+        //TODO: Tests
+        RunIncomingMessages();
     },
     selectClient: function(client){
         this.setState({
@@ -666,29 +937,15 @@ var ChatBox = React.createClass({
             currentContact: {}
         });
     },
-    cacheMessage: function(messages){
-        var contact = this.state.currentContact;
-        GlobalChatData.messages[contact.name] = messages;
-    },
     onOutgoingMessage: function(data){
-        var messages = this.state.messages;
         var operator = this.state.operator;
-
-        var message = {
-            id: CoreUtils.getMessageId(messages),
-            name: operator.name,
-            message: data.message,
-            contentType: 'text',
-            msgType: 'out',
-            operator: true,
-            datetime: CoreUtils.formatDate(new Date())
-        };
-
-        var newMessages = messages.concat([message]);
-        this.setState({
-           messages: newMessages
+        var currentContact = this.state.currentContact;
+        ChatMessageStore.addOutMessage({
+            contact: currentContact,
+            operator: operator,
+            data: data,
+            type: 'text'
         });
-        this.cacheMessage(newMessages);
     },
     renderState: function(){
         switch(this.state.chatState || 'login'){
@@ -703,6 +960,7 @@ var ChatBox = React.createClass({
                     <div id="chat-template" className="chat-container clearfix">
                         <ContactsBox contacts={this.state.contacts} onSelectClient={this.selectClient}/>
                         <ConversationBox contact={this.state.currentContact}
+                                         operator={this.state.operator}
                                          messages={this.state.messages}
                                          onClose={this.onConversationClose}
                                          onOutgoingMessage={this.onOutgoingMessage}/>
@@ -722,7 +980,29 @@ var ChatBox = React.createClass({
     }
 });
 
-ReactDOM.render(
+/*============================ Main rendering =================================*/
+
+var chatBox = ReactDOM.render(
     <ChatBox />,
     document.getElementById('chatbox')
 );
+
+function RunIncomingMessages(){
+    var messageResponses = [
+        'Why did the web developer leave the restaurant? Because of the table layout.',
+        'How do you comfort a JavaScript bug? You console it.',
+        'An SQL query enters a bar, approaches two tables and asks: "May I join you?"',
+        'What is the most used language in programming? Profanity.',
+        'What is the object-oriented way to become wealthy? Inheritance.',
+        'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
+    ];
+    function getRandomItem (arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+    var index = 0;
+    setInterval(function(){
+        var contact = getRandomItem(_contacts);
+        IncomingMessageAction.createMessage(getRandomItem(messageResponses), contact.name, '',  'text');
+        index++;
+    }, 3000)
+}
