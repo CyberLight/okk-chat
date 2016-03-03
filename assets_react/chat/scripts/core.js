@@ -83,6 +83,8 @@ var _contacts = [
     }
 ];
 
+var _activeContactId;
+
 /*============================ Constants =================================*/
 var ChatConstants = {
     CONTACT_CHANGE_EVENT: 'CONTACT_CHANGED_EVENT',
@@ -93,10 +95,9 @@ var ActionTypes = {
     CLICK_CONTACT: 'CLICK_CONTACT',
     RECEIVE_RAW_MESSAGES: 'RECEIVE_RAW_MESSAGES',
     NEW_OUT_MESSAGE: 'NEW_OUT_MESSAGE',
-    NEW_IN_MESSAGE: 'NEW_IN_MESSAGE'
+    NEW_IN_MESSAGE: 'NEW_IN_MESSAGE',
+    READ_MESSAGE: 'READ_MESSAGE'
 };
-
-
 
 /*============================ Store =================================*/
 var UnreadChatMessageStore = objectAssign({}, EventEmitter.prototype, {
@@ -119,27 +120,20 @@ var UnreadChatMessageStore = objectAssign({}, EventEmitter.prototype, {
         this.removeListener(ChatConstants.MESSAGE_CHANGE_EVENT, callback);
     },
 
-    getAllCount: function() {
-        var messages = ChatMessageStore.getAll();
-        var unreadCount = 0;
-        for (var id in messages) {
-            if (!messages[id].lastMessage.isRead) {
-                unreadCount++;
-            }
-        }
-        return unreadCount;
-    },
     getCount: function(id) {
+        if (ChatMessageStore.isReaded(id)) {
+            return 0;
+        }
         var messages = ChatMessageStore.getMessages(id);
         var unreadCount = 0;
-        for (var i=0, len=messages.length; i<len; i++) {
-            if (!messages[i].isRead) {
-                unreadCount++;
+        for (var i = messages.length-1; i >= 0; i--) {
+            if (messages[i].isRead) {
+                break;
             }
+            unreadCount++;
         }
         return unreadCount;
     }
-
 });
 
 var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
@@ -162,6 +156,10 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
         return _messages[id].messages;
     },
 
+    isReaded: function(id){
+        return _messages[id].lastMessage.isRead;
+    },
+
     emitChange: function() {
         this.emit(ChatConstants.MESSAGE_CHANGE_EVENT);
     },
@@ -180,19 +178,19 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
         this.removeListener(ChatConstants.MESSAGE_CHANGE_EVENT, callback);
     },
 
-    addOutMessage: function(info){
+    addOutMessage: function(data){
         _lastMessageId++;
         var message = {
             id: 'm_' + _lastMessageId,
-            name: info.operator.name,
-            message: info.data.message,
-            contentType: info.type,
+            name: data.operator.name,
+            message: data.data.message,
+            contentType: data.type,
             msgType: 'out',
             operator: true,
             datetime: CoreUtils.formatDate(new Date()),
             isRead: true
         };
-        _messages[info.contact.id].messages.push(message);
+        _messages[data.contact.id].messages.push(message);
         this.emitChange();
     }
 });
@@ -222,14 +220,44 @@ var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
 
     getId: function(name){
         return _contactsIds[name];
+    },
+
+    getActive: function(){
+        return _activeContactId;
     }
 });
 
 /*============================ Dispatchers =================================*/
+ChatContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
+    switch (action.type) {
+        case ActionTypes.CLICK_CONTACT:
+            _activeContactId =  action.contactId;
+            ChatContactsStore.emitChange();
+            break;
+        default:
+        // do nothing
+    }
+});
+
 
 ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
+    ChatDispatcher.waitFor([
+        ChatContactsStore.dispatchToken
+    ]);
+
     var message = null;
+    var activeContactId;
     switch(action.type) {
+        case ActionTypes.READ_MESSAGE:
+            var messages = _messages[action.contactId].messages;
+            for(var i = messages.length-1; i>=0; i--){
+                if(messages[i].isRead){
+                    break;
+                }
+                _messages[action.contactId].messages[i].isRead = true;
+            }
+            UnreadChatMessageStore.emitChange();
+            break;
         case ActionTypes.NEW_OUT_MESSAGE:
             message = CoreUtils.createOutMessageFromRaw(
                 action.message,
@@ -238,6 +266,9 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 action.msgType
             );
             _messages[action.receiver.id].messages.push(message);
+            _messages[action.receiver.id].lastMessage = message;
+            activeContactId = ChatContactsStore.getActive();
+            message.isRead = (activeContactId == action.receiver.id);
             ChatMessageStore.emitChange();
             break;
         case ActionTypes.NEW_IN_MESSAGE:
@@ -249,12 +280,10 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 action.datetime
             );
             var id = ChatContactsStore.getId(action.sender);
+            activeContactId = ChatContactsStore.getActive();
+            message.isRead = (activeContactId == id);
             _messages[id].messages.push(message);
-            ChatMessageStore.emitChange();
-            break;
-
-        case ActionTypes.CLICK_CONTACT:
-            _messages[action.contactId].lastMessage.isRead = true;
+            _messages[id].lastMessage = message;
             ChatMessageStore.emitChange();
             break;
 
@@ -272,10 +301,20 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 
 UnreadChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
     ChatDispatcher.waitFor([
+        ChatContactsStore.dispatchToken,
         ChatMessageStore.dispatchToken
     ]);
 
     switch (action.type) {
+        case ActionTypes.READ_MESSAGE:
+            UnreadChatMessageStore.emitChange();
+            break;
+        case ActionTypes.NEW_OUT_MESSAGE:
+            UnreadChatMessageStore.emitChange();
+            break;
+        case ActionTypes.NEW_IN_MESSAGE:
+            UnreadChatMessageStore.emitChange();
+            break;
         case ActionTypes.CLICK_CONTACT:
             UnreadChatMessageStore.emitChange();
             break;
@@ -321,6 +360,24 @@ var IncomingMessageAction = {
     }
 };
 
+var ReadMessageAction = {
+    createAction: function (contactId) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.READ_MESSAGE,
+            contactId: contactId
+        });
+    }
+};
+
+
+var ClickContactAction = {
+    createAction: function (contactId) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.CLICK_CONTACT,
+            contactId: contactId
+        });
+    }
+};
 /*============================= Utils ==============================*/
 
 var CoreUtils = {
@@ -635,8 +692,7 @@ var Contact = React.createClass({
     getInitialState: function() {
         return {
             data: this.props.data || {},
-            active: false,
-            unread: 0
+            active: false
         }
     },
 
@@ -661,9 +717,9 @@ var Contact = React.createClass({
         }
     },
     getUnreadMessageCount: function(){
-        if(this.state.data.unread || 0 > 0) {
+        if(this.state.unread || 0 > 0) {
             return (
-                <i className="msg-badge unread">{this.state.data.unread || 0}</i>
+                <i className="msg-badge unread">{this.state.unread || 0}</i>
             )
         }
         return '';
@@ -709,6 +765,8 @@ var ContactsListBox = React.createClass({
         if(typeof this.props.onSelectContact == 'function') {
             this.props.onSelectContact(contact);
         }
+        ClickContactAction.createAction(contact.id);
+        ReadMessageAction.createAction(contact.id);
     },
     render: function() {
         var selectedId = this.state.selectedId;
@@ -886,18 +944,10 @@ var ChatBox = React.createClass({
 
     componentDidMount: function() {
         ChatMessageStore.addChangeListener(this._onMessagesChange);
-        UnreadChatMessageStore.addChangeListener(this._onUnreadChange);
     },
 
     componentWillUnmount: function() {
         ChatMessageStore.removeChangeListener(this._onMessagesChange);
-        UnreadChatMessageStore.removeChangeListener(this._onUnreadChange);
-    },
-
-    _onUnreadChange: function(){
-        this.setState({
-            unreadAll: UnreadChatMessageStore.getAllCount()
-        });
     },
 
     _onMessagesChange: function(){
@@ -1002,7 +1052,8 @@ function RunIncomingMessages(){
     var index = 0;
     setInterval(function(){
         var contact = getRandomItem(_contacts);
-        IncomingMessageAction.createMessage(getRandomItem(messageResponses), contact.name, '',  'text');
+        IncomingMessageAction.createMessage(getRandomItem(messageResponses), contact.name, '',  'text',
+            CoreUtils.formatDate(new Date()));
         index++;
-    }, 3000)
+    }, 3000);
 }
