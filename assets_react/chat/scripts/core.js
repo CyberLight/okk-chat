@@ -346,13 +346,14 @@ var OutgoingMessageAction = {
 };
 
 var IncomingMessageAction = {
-    createMessage: function (message, sender, receiver, msgType) {
+    createMessage: function (message, sender, receiver, msgType, datetime) {
         ChatDispatcher.dispatch({
             type: ActionTypes.NEW_IN_MESSAGE,
             message: message,
             sender: sender,
             receiver: receiver,
-            msgType: msgType
+            msgType: msgType,
+            datetime: datetime
         });
         var msg = CoreUtils.createInMessageFromRaw(
             message, sender, receiver, msgType);
@@ -1052,8 +1053,13 @@ function RunIncomingMessages(){
     var index = 0;
     setInterval(function(){
         var contact = getRandomItem(_contacts);
-        IncomingMessageAction.createMessage(getRandomItem(messageResponses), contact.name, '',  'text',
-            CoreUtils.formatDate(new Date()));
+        var date = CoreUtils.formatDate(new Date());
+        IncomingMessageAction.createMessage(
+            getRandomItem(messageResponses),
+            contact.name,
+            '',
+            'text',
+            date);
         index++;
     }, 3000);
 }
