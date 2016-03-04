@@ -49,37 +49,53 @@ var _contactsIds = {
     '+996655111226': 'c_5',
     '+996755111227': 'c_6'
 };
+
+var _contactIndex = {
+    'c_1':0,
+    'c_2':1,
+    'c_3':2,
+    'c_4':3,
+    'c_5':4,
+    'c_6':5
+};
+
 //TODO: clear after testing
 var _contacts = [
     {
         id: 'c_1',
         name: '+996555111222',
-        status: 'online'
+        status: 'online',
+        scrollTop: 0
     },
     {
         id: 'c_2',
         name: '+996255111223',
-        status: 'offline'
+        status: 'offline',
+        scrollTop: 0
     },
     {
         id: 'c_3',
         name: '+996355111224',
-        status: 'online'
+        status: 'online',
+        scrollTop: 0
     },
     {
         id: 'c_4',
         name: '+996455111225',
-        status: 'offline'
+        status: 'offline',
+        scrollTop: 0
     },
     {
         id: 'c_5',
         name: '+996655111226',
-        status: 'online'
+        status: 'online',
+        scrollTop: 0
     },
     {
         id: 'c_6',
         name: '+996755111227',
-        status: 'online'
+        status: 'online',
+        scrollTop: 0
     }
 ];
 
@@ -96,7 +112,8 @@ var ActionTypes = {
     RECEIVE_RAW_MESSAGES: 'RECEIVE_RAW_MESSAGES',
     NEW_OUT_MESSAGE: 'NEW_OUT_MESSAGE',
     NEW_IN_MESSAGE: 'NEW_IN_MESSAGE',
-    READ_MESSAGE: 'READ_MESSAGE'
+    READ_MESSAGE: 'READ_MESSAGE',
+    CONTACT_MESSAGES_SCROLL: 'CONTACT_MESSAGES_SCROLL'
 };
 
 /*============================ Store =================================*/
@@ -231,9 +248,15 @@ var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
 ChatContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
     switch (action.type) {
         case ActionTypes.CLICK_CONTACT:
-            _activeContactId =  action.contactId;
+            _activeContactId = action.contactId;
             ChatContactsStore.emitChange();
             break;
+
+        case ActionTypes.CONTACT_MESSAGES_SCROLL:
+            _contacts[action.contactId].scrollTop = action.scrollTopValue;
+            ChatContactsStore.emitChange();
+            break;
+
         default:
         // do nothing
     }
@@ -250,13 +273,23 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
     switch(action.type) {
         case ActionTypes.READ_MESSAGE:
             var messages = _messages[action.contactId].messages;
+            var unreadIndex = -1;
             for(var i = messages.length-1; i>=0; i--){
                 if(messages[i].isRead){
                     break;
+                }else{
+                    unreadIndex = i;
                 }
                 _messages[action.contactId].messages[i].isRead = true;
             }
-            UnreadChatMessageStore.emitChange();
+
+            if(unreadIndex>=0){
+                _messages[action.contactId].messages[unreadIndex].firstUnread = true;
+                UnreadChatMessageStore.emitChange();
+            }else {
+                UnreadChatMessageStore.emitChange();
+            }
+
             break;
         case ActionTypes.NEW_OUT_MESSAGE:
             message = CoreUtils.createOutMessageFromRaw(
@@ -370,12 +403,21 @@ var ReadMessageAction = {
     }
 };
 
-
 var ClickContactAction = {
     createAction: function (contactId) {
         ChatDispatcher.dispatch({
             type: ActionTypes.CLICK_CONTACT,
             contactId: contactId
+        });
+    }
+};
+
+var MessagesScrollAction = {
+    createAction: function (contactId, scrollTopValue) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.CONTACT_MESSAGES_SCROLL,
+            contactId: contactId,
+            scrollTopValue: scrollTopValue
         });
     }
 };
@@ -481,7 +523,73 @@ var UnreadMessageDelimeter = React.createClass({
     render: function() {
         return (
             <li className="clearfix messages-unread">
-                <span className="mark">Unread {this.props.count || 0} messages</span>
+                <span className="mark">New messages</span>
+            </li>
+        );
+    }
+});
+
+
+var UnreadIncomingMessage = React.createClass({
+    render: function() {
+        var getCurrentTime = function (dt) {
+            var resultDate = new Date(dt) || new Date();
+            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        };
+
+        return (
+            <li className="message-container messages-unread">
+                <span className="mark">New messages</span>
+                <div className="message-data">
+                    <span className="message-data-name">
+                        <i className={"fa fa-circle " + (this.props.status || 'offline')}></i>
+                        {this.props.data.name || 'Not specified'}
+                    </span>
+                    <span className="message-data-time">
+                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                    </span>
+                </div>
+                <div className="message my-message">
+                    {this.props.data.message || 'Empty message'}
+                </div>
+            </li>
+        );
+    }
+});
+
+var UnreadOutgoingMessage = React.createClass({
+    operatorStatus: function () {
+        if (this.props.data.operator) {
+            return (
+                <i className="msg-badge">operator</i>
+            );
+        } else {
+            return '';
+        }
+    },
+    render: function() {
+        var getCurrentTime = function (dt) {
+            var resultDate = new Date(dt) || new Date();
+            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        };
+
+        return (
+            <li className="message-container clearfix messages-unread">
+                <span className="mark">New messages</span>
+                <div className="message-data align-right">
+                    <span className="message-data-time">
+                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                    </span> &nbsp;&nbsp;
+                    <span className="message-data-name">
+                        {this.props.data.name || 'Empty sender'}
+                        {this.operatorStatus()}
+                    </span>
+                    &nbsp;&nbsp;
+                    <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
+                </div>
+                <div className="message other-message float-right">
+                    {this.props.data.message || 'Empty message'}
+                </div>
             </li>
         );
     }
@@ -652,16 +760,31 @@ var FooterBox = React.createClass({
 });
 
 var HistoryBox = React.createClass({
+    scroll: 0,
     renderMessage: function(message){
         var contact = this.props.contact;
         switch(message.msgType){
             case 'in':
+                if(message.firstUnread){
+                    return (
+                        <UnreadIncomingMessage key={message.id}
+                                               data={message}
+                                               status={contact.status} />
+                    )
+                }
                 return (
                     <IncomingMessage key={message.id}
                                      data={message}
                                      status={contact.status} />
                 );
             case 'out':
+                if(message.firstUnread){
+                    return (
+                        <UnreadOutgoingMessage key={message.id}
+                                               data={message}
+                                               status={contact.status} />
+                    )
+                }
                 return (
                     <OutgoingMessage key={message.id}
                                      data={message}
@@ -669,9 +792,19 @@ var HistoryBox = React.createClass({
                 )
         }
     },
-    componentDidUpdate: function() {
+    componentWillUpdate: function(nextProps, nextState) {
+        if(nextProps.contact.id != this.props.contact.id){
+            this.scroll = 0;
+        }
         var node = ReactDOM.findDOMNode(this);
-        node.scrollTop = node.scrollHeight;
+        this.shouldScrollBottom = (node.scrollTop >= this.scroll);
+    },
+    componentDidUpdate: function() {
+        if(this.shouldScrollBottom) {
+            var node = ReactDOM.findDOMNode(this);
+            node.scrollTop = node.scrollHeight;
+            this.scroll = node.scrollTop;
+        }
     },
     render: function() {
         var renderMessage = this.renderMessage;
@@ -812,12 +945,12 @@ var ContactsBox = React.createClass({
 });
 
 var ConversationBox = React.createClass({
-    onClose: function(){
+    _onClose: function(){
         if(typeof this.props.onClose == 'function'){
             this.props.onClose();
         }
     },
-    onOutMessage: function(message){
+    _onOutMessage: function(message){
         if (typeof this.props.onOutgoingMessage == 'function'){
             this.props.onOutgoingMessage(message);
         }
@@ -825,9 +958,9 @@ var ConversationBox = React.createClass({
     render: function() {
         return (
             <div className="chat">
-                <HeaderBox contact={this.props.contact} count={this.props.messages.length} onClose={this.onClose}/>
-                <HistoryBox contact={this.props.contact} messages={this.props.messages}/>
-                <FooterBox operator={this.props.operator} contact={this.props.contact} onMessage={this.onOutMessage}/>
+                <HeaderBox contact={this.props.contact} count={this.props.messages.length} onClose={this._onClose}/>
+                <HistoryBox contact={this.props.contact} messages={this.props.messages} />
+                <FooterBox operator={this.props.operator} contact={this.props.contact} onMessage={this._onOutMessage}/>
             </div>
         );
     }
@@ -944,11 +1077,17 @@ var ChatBox = React.createClass({
     },
 
     componentDidMount: function() {
+        ChatContactsStore.addChangeListener(this._onContactsChange);
         ChatMessageStore.addChangeListener(this._onMessagesChange);
     },
 
     componentWillUnmount: function() {
+        ChatContactsStore.removeChangeListener(this._onContactsChange);
         ChatMessageStore.removeChangeListener(this._onMessagesChange);
+    },
+
+    _onContactsChange: function(){
+        this.loadContacts();
     },
 
     _onMessagesChange: function(){
@@ -998,6 +1137,12 @@ var ChatBox = React.createClass({
             type: 'text'
         });
     },
+    _onMessagesScroll: function(scrollTopValue){
+        //ChatContactsStore.setScrollTop(
+        //    this.state.currentContact.id,
+        //    scrollTopValue
+        //);
+    },
     renderState: function(){
         switch(this.state.chatState || 'login'){
             case 'login':
@@ -1014,7 +1159,7 @@ var ChatBox = React.createClass({
                                          operator={this.state.operator}
                                          messages={this.state.messages}
                                          onClose={this.onConversationClose}
-                                         onOutgoingMessage={this.onOutgoingMessage}/>
+                                         onOutgoingMessage={this.onOutgoingMessage} />
                     </div>
                 );
             case 'no-chat':
@@ -1048,7 +1193,8 @@ function RunIncomingMessages(){
         'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
     ];
     function getRandomItem (arr) {
-        return arr[Math.floor(Math.random() * arr.length)];
+        var count = 2 || arr.length;
+        return arr[Math.floor(Math.random() * count)];
     }
     var index = 0;
     setInterval(function(){
