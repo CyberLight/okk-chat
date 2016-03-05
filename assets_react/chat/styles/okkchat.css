@@ -52,6 +52,9 @@ body {
 .people-list img {
     float: left;
 }
+.people-list .contact {
+    cursor: pointer;
+}
 .people-list .about {
     float: left;
     margin-top: 8px;

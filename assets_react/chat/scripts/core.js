@@ -1005,7 +1005,7 @@ var Contact = React.createClass({
     },
     render: function() {
         return (
-            <li className={"clearfix" + this.clientActive() }  onClick={this.activateContact}>
+            <li className={"contact clearfix" + this.clientActive() }  onClick={this.activateContact}>
                 <div className="about">
                     <div className="name">{this.state.data.name || '+000000000000'}</div>
                     <div className="status">
