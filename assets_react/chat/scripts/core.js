@@ -932,14 +932,17 @@ var HistoryBox = React.createClass({
         if(nextProps.contact.id != this.props.contact.id){
             this.scroll = 0;
         }
+        var node = ReactDOM.findDOMNode(this);
+        this.canScroll = node.scrollTop >= this.scroll;
     },
     componentDidUpdate: function() {
+        var BOTTOM_OFFSET = 50;
         var unreadItem = this.refs.unreadItem;
         var node = ReactDOM.findDOMNode(this);
         if(unreadItem && unreadItem.canScroll()){
             this.refs.unreadItem.scrollIntoViewIfNeeded(node, true);
-            this.scroll = node.scrollHeight;
-        } else if (node.scrollTop >= this.scroll) {
+            this.scroll = node.scrollHeight - BOTTOM_OFFSET;
+        } else if (this.canScroll) {
             node.scrollTop = node.scrollHeight;
             this.scroll = node.scrollTop;
         }
@@ -1338,7 +1341,7 @@ function RunIncomingMessages(){
         'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
     ];
     function getRandomItem (arr) {
-        var count = arr.length;
+        var count = 2 || arr.length;
         return arr[Math.floor(Math.random() * count)];
     }
     var index = 0;
@@ -1352,5 +1355,5 @@ function RunIncomingMessages(){
             'text',
             date);
         index++;
-    }, 3000);
+    }, 1000);
 }
