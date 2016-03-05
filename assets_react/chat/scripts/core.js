@@ -536,6 +536,58 @@ var CoreUtils = {
             datetime: CoreUtils.formatDate(new Date(datetime)),
             isRead: false
         };
+    },
+    scrollIntoViewNeeded: function(parent, node, centerIfNeeded){
+        var changed = false;
+        centerIfNeeded = arguments.length === 0 ? true : !!centerIfNeeded;
+        var parentComputedStyle = window.getComputedStyle(parent, null),
+            parentBorderTopWidth = parseInt(parentComputedStyle.getPropertyValue('border-top-width')),
+            parentBorderLeftWidth = parseInt(parentComputedStyle.getPropertyValue('border-left-width')),
+            overTop = node.offsetTop - parent.offsetTop < parent.scrollTop,
+            overBottom = (node.offsetTop - parent.offsetTop + node.clientHeight - parentBorderTopWidth) > (parent.scrollTop + parent.clientHeight),
+            overLeft = node.offsetLeft - parent.offsetLeft < parent.scrollLeft,
+            overRight = (node.offsetLeft - parent.offsetLeft + node.clientWidth - parentBorderLeftWidth) > (parent.scrollLeft + parent.clientWidth),
+            alignWithTop = overTop && !overBottom;
+
+        if ((overTop || overBottom) && centerIfNeeded) {
+            parent.scrollTop = node.offsetTop - parent.offsetTop - parent.clientHeight / 2 - parentBorderTopWidth + node.clientHeight / 2;
+        }
+
+        if ((overLeft || overRight) && centerIfNeeded) {
+            parent.scrollLeft = node.offsetLeft - parent.offsetLeft - parent.clientWidth / 2 - parentBorderLeftWidth + node.clientWidth / 2;
+            changed = true;
+        }
+
+        if ((overTop || overBottom || overLeft || overRight) && !centerIfNeeded) {
+            node.scrollIntoView(alignWithTop);
+            changed = true;
+        }
+        return changed;
+    },
+    inViewport: function(parent, node, centerIfNeeded){
+        var changed = false;
+        centerIfNeeded = arguments.length === 0 ? true : !!centerIfNeeded;
+        var parentComputedStyle = window.getComputedStyle(parent, null),
+            parentBorderTopWidth = parseInt(parentComputedStyle.getPropertyValue('border-top-width')),
+            parentBorderLeftWidth = parseInt(parentComputedStyle.getPropertyValue('border-left-width')),
+            overTop = node.offsetTop - parent.offsetTop < parent.scrollTop,
+            overBottom = (node.offsetTop - parent.offsetTop + node.clientHeight - parentBorderTopWidth) > (parent.scrollTop + parent.clientHeight),
+            overLeft = node.offsetLeft - parent.offsetLeft < parent.scrollLeft,
+            overRight = (node.offsetLeft - parent.offsetLeft + node.clientWidth - parentBorderLeftWidth) > (parent.scrollLeft + parent.clientWidth),
+            alignWithTop = overTop && !overBottom;
+
+        if ((overTop || overBottom) && centerIfNeeded) {
+            changed = true;
+        }
+
+        if ((overLeft || overRight) && centerIfNeeded) {
+            changed = true;
+        }
+
+        if ((overTop || overBottom || overLeft || overRight) && !centerIfNeeded) {
+            changed = true;
+        }
+        return changed;
     }
 };
 
@@ -602,6 +654,17 @@ var UnreadMessageDelimeter = React.createClass({
 
 
 var UnreadIncomingMessage = React.createClass({
+    scrolled: false,
+    scrollIntoViewIfNeeded: function (parent, centerIfNeeded) {
+        if(!this.scrolled) {
+            var node = ReactDOM.findDOMNode(this);
+            CoreUtils.scrollIntoViewNeeded(parent, node, centerIfNeeded);
+            this.scrolled = true;
+        }
+    },
+    canScroll: function(){
+        return !this.scrolled;
+    },
     render: function() {
         var getCurrentTime = function (dt) {
             var resultDate = new Date(dt) || new Date();
@@ -838,7 +901,8 @@ var HistoryBox = React.createClass({
             case 'in':
                 if(message.firstUnread){
                     return (
-                        <UnreadIncomingMessage key={message.id}
+                        <UnreadIncomingMessage ref="unreadItem"
+                                               key={message.id}
                                                data={message}
                                                status={contact.status} />
                     )
@@ -851,7 +915,8 @@ var HistoryBox = React.createClass({
             case 'out':
                 if(message.firstUnread){
                     return (
-                        <UnreadOutgoingMessage key={message.id}
+                        <UnreadOutgoingMessage ref="unreadItem"
+                                               key={message.id}
                                                data={message}
                                                status={contact.status} />
                     )
@@ -867,12 +932,14 @@ var HistoryBox = React.createClass({
         if(nextProps.contact.id != this.props.contact.id){
             this.scroll = 0;
         }
-        var node = ReactDOM.findDOMNode(this);
-        this.shouldScrollBottom = (node.scrollTop >= this.scroll);
     },
     componentDidUpdate: function() {
-        if(this.shouldScrollBottom) {
-            var node = ReactDOM.findDOMNode(this);
+        var unreadItem = this.refs.unreadItem;
+        var node = ReactDOM.findDOMNode(this);
+        if(unreadItem && unreadItem.canScroll()){
+            this.refs.unreadItem.scrollIntoViewIfNeeded(node, true);
+            this.scroll = node.scrollHeight;
+        } else if (node.scrollTop >= this.scroll) {
             node.scrollTop = node.scrollHeight;
             this.scroll = node.scrollTop;
         }
@@ -1271,7 +1338,7 @@ function RunIncomingMessages(){
         'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
     ];
     function getRandomItem (arr) {
-        var count = 2 || arr.length;
+        var count = arr.length;
         return arr[Math.floor(Math.random() * count)];
     }
     var index = 0;
