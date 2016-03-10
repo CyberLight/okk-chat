@@ -106,14 +106,15 @@ var _contacts = [
 ];
 
 var _activeContactId,
-    _preActiveContactId;
+    _preActiveContactId,
+    _contactFilterPattern = '';
 
 /*============================ Constants =================================*/
 var ChatConstants = {
-    CONTACT_CHANGE_EVENT: 'CONTACT_CHANGED_EVENT',
     MESSAGE_CHANGE_EVENT: 'MESSAGE_CHANGED_EVENT',
     CONTACT_SELECT_EVENT: 'CONTACT_SELECT_EVENT',
-    MESSAGE_UPDATE_EVENT: 'MESSAGE_UPDATE_EVENT'
+    MESSAGE_UPDATE_EVENT: 'MESSAGE_UPDATE_EVENT',
+    CONTACTS_CHANGE_EVENT: 'CONTACTS_CHANGE_EVENT'
 };
 
 var ActionTypes = {
@@ -122,7 +123,12 @@ var ActionTypes = {
     NEW_OUT_MESSAGE: 'NEW_OUT_MESSAGE',
     NEW_IN_MESSAGE: 'NEW_IN_MESSAGE',
     READ_MESSAGE: 'READ_MESSAGE',
-    CONTACT_MESSAGES_SCROLL: 'CONTACT_MESSAGES_SCROLL'
+    CONTACT_MESSAGES_SCROLL: 'CONTACT_MESSAGES_SCROLL',
+    CONTACT_FILTER: 'CONTACT_FILTER'
+};
+
+var KeyConstants = {
+    ENTER_KEY: 13
 };
 
 /*============================ Store =================================*/
@@ -242,36 +248,47 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
 
 var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
     getAll: function(){
+        if(_contactFilterPattern){
+            _preActiveContactId = _activeContactId;
+            _activeContactId = null;
+            return _contacts.filter(function(contact){
+                return contact.name.indexOf(_contactFilterPattern) >= 0;
+            }.bind(this));
+        }
         return _contacts;
     },
 
+    setFilter: function(pattern){
+        _contactFilterPattern = pattern;
+    },
+
     emitChange: function() {
-        this.emit(ChatConstants.CONTACT_CHANGE_EVENT);
+        this.emit(ChatConstants.CONTACTS_CHANGE_EVENT);
     },
 
     emitContactSelect: function() {
-        this.emit(ChatConstants.CONTACT_CHANGE_EVENT);
+        this.emit(ChatConstants.CONTACT_SELECT_EVENT);
     },
 
     /**
      * @param {function} callback
      */
     addChangeListener: function(callback) {
-        this.on(ChatConstants.CONTACT_CHANGE_EVENT, callback);
+        this.on(ChatConstants.CONTACTS_CHANGE_EVENT, callback);
     },
 
     /**
      * @param {function} callback
      */
     addContactSelectListener: function(callback) {
-        this.on(ChatConstants.CONTACT_CHANGE_EVENT, callback);
+        this.on(ChatConstants.CONTACT_SELECT_EVENT, callback);
     },
 
     /**
      * @param {function} callback
      */
     removeChangeListener: function(callback) {
-        this.removeListener(ChatConstants.CONTACT_SELECT_EVENT, callback);
+        this.removeListener(ChatConstants.CONTACTS_CHANGE_EVENT, callback);
     },
 
     /**
@@ -304,12 +321,16 @@ ChatContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
             if(!_preActiveContactId) {
                 _preActiveContactId = _activeContactId;
             }
-            //ChatContactsStore.emitChange();
             ChatContactsStore.emitContactSelect();
             break;
 
         case ActionTypes.CONTACT_MESSAGES_SCROLL:
             _contacts[action.contactId].scrollTop = action.scrollTopValue;
+            ChatContactsStore.emitChange();
+            break;
+
+        case ActionTypes.CONTACT_FILTER:
+            ChatContactsStore.setFilter(action.pattern);
             ChatContactsStore.emitChange();
             break;
 
@@ -326,6 +347,7 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 
     var message = null;
     var activeContactId;
+    var unreadIndex = -1;
     switch(action.type) {
         case ActionTypes.CLICK_CONTACT:
             var index = _messages[_preActiveContactId].firstUnreadMsgIndex;
@@ -336,7 +358,7 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             break;
         case ActionTypes.READ_MESSAGE:
             var messages = _messages[action.contactId].messages;
-            var unreadIndex = -1;
+            unreadIndex = -1;
             for(var i = messages.length-1; i>=0; i--){
                 if(messages[i].isRead){
                     break;
@@ -394,6 +416,15 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             ChatMessageStore.init(action.rawMessages);
             ChatMessageStore.emitChange();
             break;
+
+        case ActionTypes.CONTACT_FILTER:
+            if(_preActiveContactId) {
+                unreadIndex = _messages[_preActiveContactId].firstUnreadMsgIndex;
+                if(typeof unreadIndex == 'number') {
+                    _messages[_preActiveContactId].messages[unreadIndex].firstUnread = false;
+                    _messages[_preActiveContactId].firstUnreadMsgIndex = null;
+                }
+            }
 
         default:
         // do nothing
@@ -489,6 +520,15 @@ var MessagesScrollAction = {
             type: ActionTypes.CONTACT_MESSAGES_SCROLL,
             contactId: contactId,
             scrollTopValue: scrollTopValue
+        });
+    }
+};
+
+var FilterMessageAction = {
+    createAction: function (pattern) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.CONTACT_FILTER,
+            pattern: pattern
         });
     }
 };
@@ -870,7 +910,7 @@ var FooterBox = React.createClass({
         this.setState({value: event.target.value});
     },
     handleKeyUp: function(event){
-        if (event.keyCode === 13) {
+        if (event.keyCode === KeyConstants.ENTER_KEY) {
             this.sendMessage();
         }
     },
@@ -965,9 +1005,11 @@ var HistoryBox = React.createClass({
 
 var Contact = React.createClass({
     getInitialState: function() {
+        var unreadCount = UnreadChatMessageStore.getCount(this.props.data.id);
         return {
             data: this.props.data || {},
-            active: false
+            active: false,
+            unread: unreadCount
         }
     },
 
@@ -1032,15 +1074,12 @@ var ContactsListBox = React.createClass({
         }
     },
     onActivateContact: function(contact){
-        var prevContactId = this.state.selectedId
+        var prevContactId = this.state.selectedId;
         this.setState({
             selectedId: contact.id,
             selectedContact: contact
         });
 
-        //if(typeof this.props.onSelectContact == 'function') {
-        //    this.props.onSelectContact(contact);
-        //}
         ClickContactAction.createAction(contact.id, prevContactId);
         ReadMessageAction.createAction(contact.id);
     },
@@ -1065,21 +1104,65 @@ var ContactsListBox = React.createClass({
 });
 
 var ContactSearchBox = React.createClass({
+    getInitialState: function() {
+        return {
+            value: ''
+        }
+    },
+    _handleChange: function(event){
+        this.setState({value: event.target.value});
+        if(typeof this.props.onLiveSearch == 'function'){
+            this.props.onLiveSearch(event.target.value);
+        }
+    },
+    _handleKeyUp: function(event){
+        if (event.keyCode === KeyConstants.ENTER_KEY) {
+            this._onSearch();
+        }
+    },
+    _onSearch: function(){
+        if(typeof this.props.onSearch == 'function'){
+            this.props.onSearch(this.state.value);
+        }
+    },
+    _onClear: function(){
+        this.setState({
+            value: ''
+        });
+        if(typeof this.props.onClear == 'function'){
+            this.props.onClear();
+        }
+    },
     render: function() {
         return (
             <div className="search">
-                <input type="text" placeholder="search"/>
-                <i className="fa fa-search"></i>
+                <input className="search-input"
+                       onChange={this._handleChange}
+                       onKeyUp={this._handleKeyUp}
+                       type="text" placeholder="search" value={this.state.value}/>
+                <i onClick={this._onSearch} className="fa fa-search"></i>
+                <i onClick={this._onClear} className="fa fa-close"></i>
             </div>
         );
     }
 });
 
 var ContactsBox = React.createClass({
+    _onSearch: function(pattern){
+        FilterMessageAction.createAction(pattern);
+    },
+    _onClear: function(){
+        FilterMessageAction.createAction("");
+    },
+    _onLiveSearch: function(pattern){
+        FilterMessageAction.createAction(pattern);
+    },
     render: function() {
         return (
             <div className="people-list" id="people-list">
-                <ContactSearchBox/>
+                <ContactSearchBox onLiveSearch={this._onLiveSearch}
+                                  onSearch={this._onSearch}
+                                  onClear={this._onClear}/>
                 <ContactsListBox items={this.props.contacts} onSelectContact={this.props.onSelectClient}/>
             </div>
         );
@@ -1244,13 +1327,22 @@ var ChatBox = React.createClass({
 
     loadContacts: function(){
         this.setState({
+            chatState: 'no-chat',
+            currentContact: {},
+            messages: [],
             contacts: ChatContactsStore.getAll()
         });
     },
     loadMessages: function(contact){
-        this.setState({
-            messages: ChatMessageStore.getMessages(contact.id)
-        });
+        if(contact) {
+            this.setState({
+                messages: ChatMessageStore.getMessages(contact.id)
+            });
+        } else {
+            this.setState({
+                messages: []
+            });
+        }
     },
     authSuccess: function(){
         this.setState({
@@ -1355,5 +1447,5 @@ function RunIncomingMessages(){
             'text',
             date);
         index++;
-    }, 1000);
+    }, 5000);
 }

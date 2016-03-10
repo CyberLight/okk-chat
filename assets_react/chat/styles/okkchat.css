@@ -40,9 +40,19 @@ body {
 }
 .people-list .fa-search {
     position: absolute;
+    right: 50px;
+    top: 41%;
+}
+.people-list .fa-close {
+    position: absolute;
     right: 30px;
     top: 41%;
 }
+
+.people-list .search .search-input {
+    padding-right: 53px;
+}
+
 .people-list ul {
     padding: 0 0 20px 20px;
 }
@@ -478,4 +488,9 @@ body {
 
 .chat .message-container {
     position: relative;
+}
+
+.chat .selected-phrase {
+    background-color: #fffec0;
+    font-weight: bold;
 }
