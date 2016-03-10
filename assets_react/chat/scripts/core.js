@@ -885,6 +885,45 @@ var HistoryButton = React.createClass({
     }
 });
 
+var UploadImageButton = React.createClass({
+    _onFileChange: function(e){
+        if (typeof window.FileReader !== 'function') {
+            return;
+        }
+        var $fileUpload = this.refs.fileUpload;
+        var file = $fileUpload.files[0];
+        var fr = new FileReader();
+        var self = this;
+        fr.onload = function(){
+            var img = new Image();
+            img.onload = function(){
+                var canvas = self.refs.imageCanvas;
+                canvas.width = self.img.width;
+                canvas.height = self.img.height;
+                var ctx = canvas.getContext("2d");
+                ctx.drawImage(self.img,0,0);
+                console.log(canvas.toDataURL("image/png"));
+            };
+            img.src = fr.result;
+            self.img = img;
+        };
+        fr.readAsDataURL(file);
+    },
+    render: function() {
+        return (
+                <i className={this.props.classes} style={{ position: 'relative'  }}>
+                    <form action='#'>
+                    <input style={{ opacity: 0, zIndex: 2, left: 0, top: 0, width: '100%', position: 'absolute' }}
+                           ref="fileUpload"
+                           type='file'
+                           onChange={this._onFileChange}/>
+                    </form>
+                    <canvas ref="imageCanvas" style={{ display: 'none' }}></canvas>
+                </i>
+        );
+    }
+});
+
 var FooterBox = React.createClass({
     getInitialState: function() {
         return {
@@ -921,7 +960,7 @@ var FooterBox = React.createClass({
                           onKeyUp={this.handleKeyUp}
                           rows="3"/>
                 <IconButton classes="fa fa-file-o"/>&nbsp;&nbsp;&nbsp;
-                <IconButton classes="fa fa-file-image-o"/>
+                <UploadImageButton classes="fa fa-file-image-o"/>
                 <HistoryButton onClick={this.sendMessage} title="send" icons="fa fa-paper-plane-o" classes="btn-send"/>
                 <HistoryButton title="end" icons="fa fa-comments" classes="btn-replied"/>
             </div>
