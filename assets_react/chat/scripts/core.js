@@ -3,107 +3,77 @@ var ChatDispatcher = new Flux.Dispatcher();
 var _lastMessageId = 1;
 //TODO: clear after testing
 var _messages = {
-    'c_1': {
-        messages:[],
-        lastMessage: {
-            isRead: false
-        },
-        firstUnreadMsgIndex: null
+    '+996555111222': {
+        messages:{},
+        unreadIds: [],
+        firstUnreadMsgId: null
     },
-    'c_2': {
-        messages:[],
-        lastMessage: {
-            isRead: false
-        },
-        firstUnreadMsgIndex: null
+    '+996255111223': {
+        messages:{},
+        unreadIds: [],
+        firstUnreadMsgId: null
     },
-    'c_3': {
-        messages:[],
-        lastMessage: {
-            isRead: false
-        },
-        firstUnreadMsgIndex: null
+    '+996355111224': {
+        messages:{},
+        unreadIds: [],
+        firstUnreadMsgId: null
     },
-    'c_4': {
-        messages:[],
-        lastMessage: {
-            isRead: false
-        },
-        firstUnreadMsgIndex: null
+    '+996455111225': {
+        messages:{},
+        unreadIds: [],
+        firstUnreadMsgId: null
     },
-    'c_5': {
-        messages:[],
-        lastMessage: {
-            isRead: false
-        },
-        firstUnreadMsgIndex: null
+    '+996655111226': {
+        messages:{},
+        unreadIds: [],
+        firstUnreadMsgId: null
     },
-    'c_6': {
-        messages:[],
-        lastMessage: {
-            isRead: false
-        },
-        firstUnreadMsgIndex: null
+    '+996755111227': {
+        messages:{},
+        unreadIds: [],
+        firstUnreadMsgId: null
     }
 };
-//TODO: clear after testing
-var _contactsIds = {
-    '+996555111222': 'c_1',
-    '+996255111223': 'c_2',
-    '+996355111224': 'c_3',
-    '+996455111225': 'c_4',
-    '+996655111226': 'c_5',
-    '+996755111227': 'c_6'
-};
-
-var _contactIndex = {
-    'c_1':0,
-    'c_2':1,
-    'c_3':2,
-    'c_4':3,
-    'c_5':4,
-    'c_6':5
-};
 
 //TODO: clear after testing
-var _contacts = [
-    {
+var _contacts = {
+    '+996555111222': {
         id: 'c_1',
         name: '+996555111222',
         status: 'online',
         scrollTop: 0
     },
-    {
+    '+996255111223': {
         id: 'c_2',
         name: '+996255111223',
         status: 'offline',
         scrollTop: 0
     },
-    {
+    '+996355111224': {
         id: 'c_3',
         name: '+996355111224',
         status: 'online',
         scrollTop: 0
     },
-    {
+    '+996455111225': {
         id: 'c_4',
         name: '+996455111225',
         status: 'offline',
         scrollTop: 0
     },
-    {
+    '+996655111226': {
         id: 'c_5',
         name: '+996655111226',
         status: 'online',
         scrollTop: 0
     },
-    {
+    '+996755111227': {
         id: 'c_6',
         name: '+996755111227',
         status: 'online',
         scrollTop: 0
     }
-];
+};
 
 var _activeContactId,
     _preActiveContactId,
@@ -153,18 +123,8 @@ var UnreadChatMessageStore = objectAssign({}, EventEmitter.prototype, {
     },
 
     getCount: function(id) {
-        if (ChatMessageStore.isReaded(id)) {
-            return 0;
-        }
-        var messages = ChatMessageStore.getMessages(id);
-        var unreadCount = 0;
-        for (var i = messages.length-1; i >= 0; i--) {
-            if (messages[i].isRead) {
-                break;
-            }
-            unreadCount++;
-        }
-        return unreadCount;
+        var messages = ChatMessageStore.getUnreadMessageIds(id);
+        return messages.length;
     }
 });
 
@@ -176,21 +136,49 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
         return _messages;
     },
     getMessages: function(id){
+        if(!id){
+            return [];
+        }
         var MessageStoreItem = {
-            messages:[],
-            firstUnreadMsgIndex: null,
-            lastMessage: {
-                read: false
-            }
+            messages: {},
+            unreadIds: [],
+            firstUnreadMsgId: null
         };
         if(!_messages[id]){
             _messages[id] = MessageStoreItem;
         }
-        return _messages[id].messages;
+
+        var result = [];
+        var messages = _messages[id].messages;
+
+        for(var msgId in messages){
+            result.push(messages[msgId]);
+        }
+
+        return result;
     },
 
-    isReaded: function(id){
-        return _messages[id].lastMessage.isRead;
+    addMessage: function(id, message, activeId){
+        message.isRead = (activeId == id);
+        if(!message.isRead){
+            _messages[id].unreadIds.push(message.id);
+            if(_messages[id].firstUnreadMsgId == null){
+                _messages[id].firstUnreadMsgId = message.id;
+            }
+        }
+        _messages[id].messages[message.id] = message;
+    },
+
+    getUnreadMessageIds: function(id){
+        var MessageStoreItem = {
+            messages: {},
+            unreadIds: [],
+            firstUnreadMsgId: null
+        };
+        if(!_messages[id]){
+            _messages[id] = MessageStoreItem;
+        }
+        return _messages[id].unreadIds;
     },
 
     emitChange: function() {
@@ -241,21 +229,55 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
             datetime: CoreUtils.formatDate(new Date()),
             isRead: true
         };
-        _messages[data.contact.id].messages.push(message);
+        _messages[data.contact.name].messages[message.id] = message;
         this.emitChange();
+    },
+
+    unmarkFirstRead: function(id){
+        if(id) {
+            var msgId = _messages[id].firstUnreadMsgId;
+            if (msgId != null) {
+                _messages[id].messages[msgId].firstUnread = false;
+            }
+        }
+    },
+    readMessages: function(id){
+        var messages = _messages[id].messages;
+        var unreadIds = _messages[id].unreadIds || (_messages[id].unreadIds = []);
+
+        for(var i = 0, len = unreadIds.length; i < len; i++){
+            var message = messages[unreadIds[i]];
+            if(i == 0){
+                message.firstUnread = true;
+                _messages[id].firstUnreadMsgId = message.id;
+            }
+            message.isRead = true;
+        }
+
+        _messages[id].unreadIds = [];
     }
 });
 
 var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
     getAll: function(){
-        if(_contactFilterPattern){
+        var result = [];
+        if(_contactFilterPattern) {
             _preActiveContactId = _activeContactId;
             _activeContactId = null;
-            return _contacts.filter(function(contact){
-                return contact.name.indexOf(_contactFilterPattern) >= 0;
-            }.bind(this));
+            for (var id in _contacts) {
+                var contact = _contacts[id];
+                if (contact.name.indexOf(_contactFilterPattern) >= 0) {
+                    result.push(contact);
+                }
+            }
+        }else{
+            for (var id in _contacts) {
+                var contact = _contacts[id];
+                result.push(contact);
+            }
         }
-        return _contacts;
+
+        return result;
     },
 
     setFilter: function(pattern){
@@ -298,17 +320,19 @@ var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
         this.removeListener(ChatConstants.CONTACT_SELECT_EVENT, callback);
     },
 
-    getId: function(name){
-        return _contactsIds[name];
-    },
-
     getActive: function(){
         return _activeContactId;
     },
 
     getCurrentContact: function(){
-        var index = _contactIndex[_activeContactId];
-        return _contacts[index];
+        return _contacts[_activeContactId];
+    },
+    setActive: function(id){
+        _preActiveContactId = _activeContactId;
+        _activeContactId = id;
+        if(!_preActiveContactId) {
+            _preActiveContactId = _activeContactId;
+        }
     }
 });
 
@@ -316,11 +340,7 @@ var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
 ChatContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
     switch (action.type) {
         case ActionTypes.CLICK_CONTACT:
-            _preActiveContactId = _activeContactId;
-            _activeContactId = action.contactId;
-            if(!_preActiveContactId) {
-                _preActiveContactId = _activeContactId;
-            }
+            ChatContactsStore.setActive(action.contactId);
             ChatContactsStore.emitContactSelect();
             break;
 
@@ -350,31 +370,15 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
     var unreadIndex = -1;
     switch(action.type) {
         case ActionTypes.CLICK_CONTACT:
-            var index = _messages[_preActiveContactId].firstUnreadMsgIndex;
-            if(typeof index == 'number'){
-                _messages[_preActiveContactId].messages[index].firstUnread = false;
-            }
+            ChatMessageStore.unmarkFirstRead(action.prevContactId);
+            //if(action.prevContactId == action.contactId) {
+            ChatMessageStore.emitUpdate();
+            //}
             ChatMessageStore.emitChange();
             break;
         case ActionTypes.READ_MESSAGE:
-            var messages = _messages[action.contactId].messages;
-            unreadIndex = -1;
-            for(var i = messages.length-1; i>=0; i--){
-                if(messages[i].isRead){
-                    break;
-                }else{
-                    unreadIndex = i;
-                }
-                _messages[action.contactId].messages[i].isRead = true;
-            }
-
-            if(unreadIndex>=0){
-                _messages[action.contactId].messages[unreadIndex].firstUnread = true;
-                _messages[action.contactId].firstUnreadMsgIndex = unreadIndex;
-                UnreadChatMessageStore.emitChange();
-            }else {
-                UnreadChatMessageStore.emitChange();
-            }
+            ChatMessageStore.readMessages(action.contactId);
+            UnreadChatMessageStore.emitChange();
 
             break;
         case ActionTypes.NEW_OUT_MESSAGE:
@@ -384,11 +388,9 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 action.receiver,
                 action.msgType
             );
-            _messages[action.receiver.id].messages.push(message);
-            _messages[action.receiver.id].lastMessage = message;
             activeContactId = ChatContactsStore.getActive();
-            message.isRead = (activeContactId == action.receiver.id);
-            if(action.receiver.id == activeContactId) {
+            ChatMessageStore.addMessage(action.receiver.name, message, activeContactId);
+            if(action.receiver.name == activeContactId) {
                 ChatMessageStore.emitUpdate();
             }
             ChatMessageStore.emitChange();
@@ -401,12 +403,9 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 action.msgType,
                 action.datetime
             );
-            var id = ChatContactsStore.getId(action.sender);
             activeContactId = ChatContactsStore.getActive();
-            message.isRead = (activeContactId == id);
-            _messages[id].messages.push(message);
-            _messages[id].lastMessage = message;
-            if(id == activeContactId) {
+            ChatMessageStore.addMessage(action.sender, message, activeContactId);
+            if(action.sender == activeContactId) {
                 ChatMessageStore.emitUpdate();
             }
             ChatMessageStore.emitChange();
@@ -419,10 +418,10 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 
         case ActionTypes.CONTACT_FILTER:
             if(_preActiveContactId) {
-                unreadIndex = _messages[_preActiveContactId].firstUnreadMsgIndex;
-                if(typeof unreadIndex == 'number') {
+                unreadIndex = _messages[_preActiveContactId].firstUnreadMsgId;
+                if(unreadIndex != null) {
                     _messages[_preActiveContactId].messages[unreadIndex].firstUnread = false;
-                    _messages[_preActiveContactId].firstUnreadMsgIndex = null;
+                    _messages[_preActiveContactId].firstUnreadMsgId = null;
                 }
             }
 
@@ -505,10 +504,10 @@ var ReadMessageAction = {
 };
 
 var ClickContactAction = {
-    createAction: function (contactId, prevContactId) {
+    createAction: function (contactId) {
         ChatDispatcher.dispatch({
             type: ActionTypes.CLICK_CONTACT,
-            prevContactId: prevContactId,
+            prevContactId: _preActiveContactId,
             contactId: contactId
         });
     }
@@ -893,18 +892,15 @@ var FooterBox = React.createClass({
         };
     },
     sendMessage: function(e){
-        //if(typeof this.props.onMessage == 'function'){
-        //    this.props.onMessage({
-        //        message: this.state.value
-        //    });
-        //}
-        OutgoingMessageAction.createMessage(
-            this.state.value,
-            this.props.operator,
-            this.props.contact,
-            'text'
-        );
-        this.setState({ value: '' });
+        if(this.state.value.trim() !== '') {
+            OutgoingMessageAction.createMessage(
+                this.state.value,
+                this.props.operator,
+                this.props.contact,
+                'text'
+            );
+            this.setState({value: ''});
+        }
     },
     handleChange: function(event){
         this.setState({value: event.target.value});
@@ -968,14 +964,7 @@ var HistoryBox = React.createClass({
                 )
         }
     },
-    componentWillUpdate: function(nextProps, nextState) {
-        if(nextProps.contact.id != this.props.contact.id){
-            this.scroll = 0;
-        }
-        var node = ReactDOM.findDOMNode(this);
-        this.canScroll = node.scrollTop >= this.scroll;
-    },
-    componentDidUpdate: function() {
+    _scrollToFirstUnread: function(){
         var BOTTOM_OFFSET = 50;
         var unreadItem = this.refs.unreadItem;
         var node = ReactDOM.findDOMNode(this);
@@ -986,6 +975,19 @@ var HistoryBox = React.createClass({
             node.scrollTop = node.scrollHeight;
             this.scroll = node.scrollTop;
         }
+    },
+    componentDidMount: function(){
+        this._scrollToFirstUnread();
+    },
+    componentWillUpdate: function(nextProps, nextState) {
+        if(nextProps.contact.id != this.props.contact.id){
+            this.scroll = 0;
+        }
+        var node = ReactDOM.findDOMNode(this);
+        this.canScroll = node.scrollTop >= this.scroll;
+    },
+    componentDidUpdate: function() {
+        this._scrollToFirstUnread();
     },
     render: function() {
         var renderMessage = this.renderMessage;
@@ -1005,7 +1007,7 @@ var HistoryBox = React.createClass({
 
 var Contact = React.createClass({
     getInitialState: function() {
-        var unreadCount = UnreadChatMessageStore.getCount(this.props.data.id);
+        var unreadCount = UnreadChatMessageStore.getCount(this.props.data.name);
         return {
             data: this.props.data || {},
             active: false,
@@ -1022,7 +1024,7 @@ var Contact = React.createClass({
     },
 
     _onUnreadChange: function(){
-        var unread = UnreadChatMessageStore.getCount(this.state.data.id);
+        var unread = UnreadChatMessageStore.getCount(this.state.data.name);
         this.setState({
             unread: unread
         });
@@ -1043,7 +1045,7 @@ var Contact = React.createClass({
     },
     clientActive: function(){
         var contact = this.state.data;
-        if(this.props.selectedId == contact.id){
+        if(this.props.selectedId == contact.name){
             return ' active';
         }
         return '';
@@ -1067,24 +1069,12 @@ var Contact = React.createClass({
 });
 
 var ContactsListBox = React.createClass({
-    getInitialState: function() {
-        return {
-            selectedId: '',
-            selectedContact: {}
-        }
-    },
     onActivateContact: function(contact){
-        var prevContactId = this.state.selectedId;
-        this.setState({
-            selectedId: contact.id,
-            selectedContact: contact
-        });
-
-        ClickContactAction.createAction(contact.id, prevContactId);
-        ReadMessageAction.createAction(contact.id);
+        ClickContactAction.createAction(contact.name);
+        ReadMessageAction.createAction(contact.name);
     },
     render: function() {
-        var selectedId = this.state.selectedId;
+        var selectedId = this.props.current ? this.props.current.name : null;
         var onActivateContact = this.onActivateContact;
         return (
             <ul className="list">
@@ -1163,7 +1153,7 @@ var ContactsBox = React.createClass({
                 <ContactSearchBox onLiveSearch={this._onLiveSearch}
                                   onSearch={this._onSearch}
                                   onClear={this._onClear}/>
-                <ContactsListBox items={this.props.contacts} onSelectContact={this.props.onSelectClient}/>
+                <ContactsListBox items={this.props.contacts} current={this.props.current} onSelectContact={this.props.onSelectClient}/>
             </div>
         );
     }
@@ -1318,6 +1308,9 @@ var ChatBox = React.createClass({
     },
 
     _onContactsChange: function(){
+        this.setState({
+            chatState: 'no-chat'
+        });
         this.loadContacts();
     },
 
@@ -1327,22 +1320,15 @@ var ChatBox = React.createClass({
 
     loadContacts: function(){
         this.setState({
-            chatState: 'no-chat',
             currentContact: {},
             messages: [],
             contacts: ChatContactsStore.getAll()
         });
     },
     loadMessages: function(contact){
-        if(contact) {
-            this.setState({
-                messages: ChatMessageStore.getMessages(contact.id)
-            });
-        } else {
-            this.setState({
-                messages: []
-            });
-        }
+        this.setState({
+            messages: ChatMessageStore.getMessages(contact.name)
+        });
     },
     authSuccess: function(){
         this.setState({
@@ -1358,7 +1344,6 @@ var ChatBox = React.createClass({
             currentContact: client,
             messages: []
         });
-        this.loadMessages(client);
     },
     onConversationClose: function(){
         this.setState({
@@ -1377,12 +1362,6 @@ var ChatBox = React.createClass({
             type: 'text'
         });
     },
-    _onMessagesScroll: function(scrollTopValue){
-        //ChatContactsStore.setScrollTop(
-        //    this.state.currentContact.id,
-        //    scrollTopValue
-        //);
-    },
     renderState: function(){
         switch(this.state.chatState || 'login'){
             case 'login':
@@ -1394,7 +1373,7 @@ var ChatBox = React.createClass({
             case 'chat':
                 return (
                     <div id="chat-template" className="chat-container clearfix">
-                        <ContactsBox contacts={this.state.contacts} onSelectClient={this.selectClient}/>
+                        <ContactsBox current={this.state.currentContact} contacts={this.state.contacts} onSelectClient={this.selectClient}/>
                         <ConversationBox contact={this.state.currentContact}
                                          operator={this.state.operator}
                                          messages={this.state.messages}
@@ -1434,7 +1413,8 @@ function RunIncomingMessages(){
     ];
     function getRandomItem (arr) {
         var count = 2 || arr.length;
-        return arr[Math.floor(Math.random() * count)];
+        var keys = Object.keys(arr);
+        return arr[keys[Math.floor(Math.random() * count)]];
     }
     var index = 0;
     setInterval(function(){
