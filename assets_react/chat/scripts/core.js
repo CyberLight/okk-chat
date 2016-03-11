@@ -371,9 +371,7 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
     switch(action.type) {
         case ActionTypes.CLICK_CONTACT:
             ChatMessageStore.unmarkFirstRead(action.prevContactId);
-            //if(action.prevContactId == action.contactId) {
             ChatMessageStore.emitUpdate();
-            //}
             ChatMessageStore.emitChange();
             break;
         case ActionTypes.READ_MESSAGE:
@@ -694,6 +692,17 @@ var UnreadMessageDelimeter = React.createClass({
 
 var UnreadIncomingMessage = React.createClass({
     scrolled: false,
+    renderMessage: function(data){
+        if(data.contentType == 'text'){
+            return (
+                data.message || 'Empty message'
+            );
+        } else if(data.contentType == 'image'){
+            return (
+                <img className="image-message" src={ data.message } />
+            );
+        }
+    },
     scrollIntoViewIfNeeded: function (parent, centerIfNeeded) {
         if(!this.scrolled) {
             var node = ReactDOM.findDOMNode(this);
@@ -723,7 +732,7 @@ var UnreadIncomingMessage = React.createClass({
                     </span>
                 </div>
                 <div className="message my-message">
-                    {this.props.data.message || 'Empty message'}
+                    { this.renderMessage(this.props.data) }
                 </div>
             </li>
         );
@@ -731,6 +740,17 @@ var UnreadIncomingMessage = React.createClass({
 });
 
 var UnreadOutgoingMessage = React.createClass({
+    renderMessage: function(data){
+        if(data.contentType == 'text'){
+            return (
+                data.message || 'Empty message'
+            );
+        } else if(data.contentType == 'image'){
+            return (
+                <img className="image-message" src={ data.message } />
+            );
+        }
+    },
     operatorStatus: function () {
         if (this.props.data.operator) {
             return (
@@ -761,7 +781,7 @@ var UnreadOutgoingMessage = React.createClass({
                     <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
                 <div className="message other-message float-right">
-                    {this.props.data.message || 'Empty message'}
+                    { this.renderMessage(this.props.data) }
                 </div>
             </li>
         );
@@ -770,6 +790,17 @@ var UnreadOutgoingMessage = React.createClass({
 
 
 var IncomingMessage = React.createClass({
+    renderMessage: function(data){
+        if(data.contentType == 'text'){
+            return (
+                data.message || 'Empty message'
+            );
+        } else if(data.contentType == 'image'){
+            return (
+                <img className="image-message" src={ data.message } />
+            );
+        }
+    },
     render: function() {
         var getCurrentTime = function (dt) {
             var resultDate = new Date(dt) || new Date();
@@ -788,7 +819,7 @@ var IncomingMessage = React.createClass({
                     </span>
                 </div>
                 <div className="message my-message">
-                    {this.props.data.message || 'Empty message'}
+                    { this.renderMessage(this.props.data) }
                 </div>
             </li>
         );
@@ -797,12 +828,24 @@ var IncomingMessage = React.createClass({
 
 var OutgoingMessage = React.createClass({
     operatorStatus: function () {
+        console.log('OutgoingMessage');
         if (this.props.data.operator) {
             return (
                 <i className="msg-badge">operator</i>
             );
         } else {
             return '';
+        }
+    },
+    renderMessage: function(data){
+        if(data.contentType == 'text'){
+            return (
+                data.message || 'Empty message'
+            );
+        } else if(data.contentType == 'image'){
+            return (
+                <img className="image-message" src={ data.message } />
+            );
         }
     },
     render: function() {
@@ -825,7 +868,7 @@ var OutgoingMessage = React.createClass({
                     <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
                 <div className="message other-message float-right">
-                    {this.props.data.message || 'Empty message'}
+                    { this.renderMessage(this.props.data) }
                 </div>
             </li>
         );
@@ -886,6 +929,11 @@ var HistoryButton = React.createClass({
 });
 
 var UploadImageButton = React.createClass({
+    _onUploadedBase64: function(b64string){
+        if(this.props.onImageBase64) {
+            this.props.onImageBase64(b64string);
+        }
+    },
     _onFileChange: function(e){
         if (typeof window.FileReader !== 'function') {
             return;
@@ -902,7 +950,8 @@ var UploadImageButton = React.createClass({
                 canvas.height = self.img.height;
                 var ctx = canvas.getContext("2d");
                 ctx.drawImage(self.img,0,0);
-                console.log(canvas.toDataURL("image/png"));
+                var b64string = canvas.toDataURL("image/png");
+                self._onUploadedBase64(b64string);
             };
             img.src = fr.result;
             self.img = img;
@@ -949,6 +998,14 @@ var FooterBox = React.createClass({
             this.sendMessage();
         }
     },
+    _onImageUpload: function(b64string){
+        OutgoingMessageAction.createMessage(
+            b64string,
+            this.props.operator,
+            this.props.contact,
+            'image'
+        );
+    },
     render: function() {
         return (
             <div className="chat-message clearfix">
@@ -960,7 +1017,7 @@ var FooterBox = React.createClass({
                           onKeyUp={this.handleKeyUp}
                           rows="3"/>
                 <IconButton classes="fa fa-file-o"/>&nbsp;&nbsp;&nbsp;
-                <UploadImageButton classes="fa fa-file-image-o"/>
+                <UploadImageButton onImageBase64={this._onImageUpload} classes="fa fa-file-image-o"/>
                 <HistoryButton onClick={this.sendMessage} title="send" icons="fa fa-paper-plane-o" classes="btn-send"/>
                 <HistoryButton title="end" icons="fa fa-comments" classes="btn-replied"/>
             </div>
@@ -1450,21 +1507,38 @@ function RunIncomingMessages(){
         'What is the object-oriented way to become wealthy? Inheritance.',
         'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
     ];
+    var contentType = ['text', 'text', 'image'];
+
     function getRandomItem (arr) {
         var keys = Object.keys(arr);
         var count = keys.length;
         return arr[keys[Math.floor(Math.random() * count)]];
     }
+
     var index = 0;
     setInterval(function(){
         var contact = getRandomItem(_contacts);
         var date = CoreUtils.formatDate(new Date());
-        IncomingMessageAction.createMessage(
-            getRandomItem(messageResponses),
-            contact.name,
-            '',
-            'text',
-            date);
+
+        var currentContentType = getRandomItem(contentType);
+        if(currentContentType == 'text') {
+
+            IncomingMessageAction.createMessage(
+                getRandomItem(messageResponses),
+                contact.name,
+                '',
+                'text',
+                date);
+
+        } else if(currentContentType == 'image') {
+            IncomingMessageAction.createMessage(
+                getRandomItem(ImageMessages),
+                contact.name,
+                '',
+                'image',
+                date);
+        }
+
         index++;
     }, 2000);
 }
