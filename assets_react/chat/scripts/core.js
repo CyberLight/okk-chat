@@ -828,7 +828,6 @@ var IncomingMessage = React.createClass({
 
 var OutgoingMessage = React.createClass({
     operatorStatus: function () {
-        console.log('OutgoingMessage');
         if (this.props.data.operator) {
             return (
                 <i className="msg-badge">operator</i>
