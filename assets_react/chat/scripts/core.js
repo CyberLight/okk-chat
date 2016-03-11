@@ -929,6 +929,14 @@ var HistoryButton = React.createClass({
 });
 
 var UploadImageButton = React.createClass({
+    getCoefficient: function(width, height, limit){
+        var maxHW = Math.max(width, height);
+        var coefficient = 1;
+        if(maxHW > limit){
+            coefficient = maxHW / limit;
+        }
+        return coefficient;
+    },
     _onUploadedBase64: function(b64string){
         if(this.props.onImageBase64) {
             this.props.onImageBase64(b64string);
@@ -942,16 +950,27 @@ var UploadImageButton = React.createClass({
         var file = $fileUpload.files[0];
         var fr = new FileReader();
         var self = this;
+
         fr.onload = function(){
             var img = new Image();
             img.onload = function(){
                 var canvas = self.refs.imageCanvas;
-                canvas.width = self.img.width;
-                canvas.height = self.img.height;
+                var coefficient = self.getCoefficient(self.img.width, self.img.height, 1280);
+                canvas.width = self.img.width / coefficient;
+                canvas.height = self.img.height / coefficient;
+
                 var ctx = canvas.getContext("2d");
-                ctx.drawImage(self.img,0,0);
+                ctx.drawImage(self.img,0,0,canvas.width, canvas.height);
+                var fullb64string = canvas.toDataURL("image/png");
+
+                coefficient = self.getCoefficient(self.img.width, self.img.height, 150);
+                canvas.width = self.img.width / coefficient;
+                canvas.height = self.img.height / coefficient;
+
+                ctx.drawImage(self.img,0,0,canvas.width, canvas.height);
                 var b64string = canvas.toDataURL("image/png");
-                self._onUploadedBase64(b64string);
+
+                self._onUploadedBase64(b64string, fullb64string);
             };
             img.src = fr.result;
             self.img = img;
