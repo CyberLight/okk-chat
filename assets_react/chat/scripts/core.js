@@ -964,7 +964,8 @@ var UploadImageButton = React.createClass({
                     <form action='#'>
                     <input style={{ opacity: 0, zIndex: 2, left: 0, top: 0, width: '100%', position: 'absolute' }}
                            ref="fileUpload"
-                           type='file'
+                           type="file"
+                           accept="image/*"
                            onChange={this._onFileChange}/>
                     </form>
                     <canvas ref="imageCanvas" style={{ display: 'none' }}></canvas>
