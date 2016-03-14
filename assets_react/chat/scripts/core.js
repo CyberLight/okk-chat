@@ -478,17 +478,29 @@ var OutgoingMessageAction = {
 
 var IncomingMessageAction = {
     createMessage: function (message, sender, receiver, msgType, datetime) {
-        ChatDispatcher.dispatch({
-            type: ActionTypes.NEW_IN_MESSAGE,
-            message: message,
-            sender: sender,
-            receiver: receiver,
-            msgType: msgType,
-            datetime: datetime
-        });
-        var msg = CoreUtils.createInMessageFromRaw(
-            message, sender, receiver, msgType);
-        //Отправка на сервер
+        if(msgType == 'image'){
+            CoreUtils.getThumbnailBase64(message, function(b64string){
+                ChatDispatcher.dispatch({
+                    type: ActionTypes.NEW_IN_MESSAGE,
+                    message: b64string,
+                    sender: sender,
+                    receiver: receiver,
+                    msgType: msgType,
+                    datetime: datetime
+                });
+            });
+        }else {
+            ChatDispatcher.dispatch({
+                type: ActionTypes.NEW_IN_MESSAGE,
+                message: message,
+                sender: sender,
+                receiver: receiver,
+                msgType: msgType,
+                datetime: datetime
+            });
+        }
+        //var msg = CoreUtils.createInMessageFromRaw(
+        //    message, sender, receiver, msgType);
     }
 };
 
@@ -601,30 +613,41 @@ var CoreUtils = {
         }
         return changed;
     },
-    inViewport: function(parent, node, centerIfNeeded){
-        var changed = false;
-        centerIfNeeded = arguments.length === 0 ? true : !!centerIfNeeded;
-        var parentComputedStyle = window.getComputedStyle(parent, null),
-            parentBorderTopWidth = parseInt(parentComputedStyle.getPropertyValue('border-top-width')),
-            parentBorderLeftWidth = parseInt(parentComputedStyle.getPropertyValue('border-left-width')),
-            overTop = node.offsetTop - parent.offsetTop < parent.scrollTop,
-            overBottom = (node.offsetTop - parent.offsetTop + node.clientHeight - parentBorderTopWidth) > (parent.scrollTop + parent.clientHeight),
-            overLeft = node.offsetLeft - parent.offsetLeft < parent.scrollLeft,
-            overRight = (node.offsetLeft - parent.offsetLeft + node.clientWidth - parentBorderLeftWidth) > (parent.scrollLeft + parent.clientWidth),
-            alignWithTop = overTop && !overBottom;
-
-        if ((overTop || overBottom) && centerIfNeeded) {
-            changed = true;
+    getCoefficient: function(width, height, limit){
+        var maxHW = Math.max(width, height);
+        var coefficient = 1;
+        if(maxHW > limit){
+            coefficient = maxHW / limit;
         }
+        return coefficient;
+    },
+    getThumbnailBase64: function(srcBase64, cb){
+        var self = this;
+        var canvas = document.createElement('canvas');
+        var image = new Image();
+        image.onload = function() {
+            var imgWidth = image.width;
+            var imgHeight = image.height;
 
-        if ((overLeft || overRight) && centerIfNeeded) {
-            changed = true;
-        }
+            var coefficient = self.getCoefficient(imgWidth, imgHeight, 1280);
+            canvas.width = imgWidth / coefficient;
+            canvas.height = imgHeight / coefficient;
 
-        if ((overTop || overBottom || overLeft || overRight) && !centerIfNeeded) {
-            changed = true;
-        }
-        return changed;
+            var ctx = canvas.getContext("2d");
+            ctx.drawImage(image,0,0,canvas.width, canvas.height);
+
+            coefficient = self.getCoefficient(imgWidth, imgHeight, 150);
+            canvas.width = imgWidth / coefficient;
+            canvas.height = imgHeight / coefficient;
+
+            ctx.drawImage(image,0,0,canvas.width, canvas.height);
+            var b64string = canvas.toDataURL("image/png");
+            canvas = image = null;
+            if(typeof cb == 'function') {
+                cb(b64string);
+            }
+        };
+        image.src = srcBase64;
     }
 };
 
@@ -954,17 +977,19 @@ var UploadImageButton = React.createClass({
             var img = new Image();
             img.onload = function(){
                 var canvas = self.refs.imageCanvas;
-                var coefficient = self.getCoefficient(self.img.width, self.img.height, 1280);
-                canvas.width = self.img.width / coefficient;
-                canvas.height = self.img.height / coefficient;
+                var imgWidth = self.img.width;
+                var imgHeight = self.img.height;
+                var coefficient = self.getCoefficient(imgWidth, imgHeight, 1280);
+                canvas.width = imgWidth / coefficient;
+                canvas.height = imgHeight / coefficient;
 
                 var ctx = canvas.getContext("2d");
                 ctx.drawImage(self.img,0,0,canvas.width, canvas.height);
                 var fullb64string = canvas.toDataURL("image/png");
 
-                coefficient = self.getCoefficient(self.img.width, self.img.height, 150);
-                canvas.width = self.img.width / coefficient;
-                canvas.height = self.img.height / coefficient;
+                coefficient = self.getCoefficient(imgWidth, imgHeight, 150);
+                canvas.width = imgWidth / coefficient;
+                canvas.height = imgHeight / coefficient;
 
                 ctx.drawImage(self.img,0,0,canvas.width, canvas.height);
                 var b64string = canvas.toDataURL("image/png");
