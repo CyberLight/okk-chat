@@ -992,6 +992,11 @@ var HeaderBox = React.createClass({
             this.props.onClose();
         }
     },
+    _minimizeClicked: function(e){
+        if(typeof this.props.onMinimize == 'function') {
+            this.props.onMinimize();
+        }
+    },
     render: function() {
         return (
             <div className="chat-header clearfix">
@@ -1004,17 +1009,22 @@ var HeaderBox = React.createClass({
                     </div>
                 </div>
                 <IconButton onClick={this.closeClicked} classes="fa fa-times header-icon"/>
-                <IconButton classes="fa fa-minus-square header-icon"/>
+                <IconButton onClick={this._minimizeClicked} classes="fa fa-minus-square header-icon"/>
             </div>
         );
     }
 });
 
 var EmptyHeaderBox = React.createClass({
+    _onMinimize: function(){
+        if(typeof this.props.onMinimize == 'function'){
+            this.props.onMinimize();
+        }
+    },
     render: function() {
         return (
             <div className="chat-header clearfix">
-                <IconButton classes="fa fa-minus-square header-icon"/>
+                <IconButton onClick={this._onMinimize} classes="fa fa-minus-square header-icon"/>
             </div>
         );
     }
@@ -1395,6 +1405,11 @@ var ConversationBox = React.createClass({
             this.props.onClose();
         }
     },
+    _onMinimize: function(){
+        if(typeof this.props.onMinimize == 'function'){
+            this.props.onMinimize();
+        }
+    },
     _onOutMessage: function(message){
         if (typeof this.props.onOutgoingMessage == 'function'){
             this.props.onOutgoingMessage(message);
@@ -1403,7 +1418,9 @@ var ConversationBox = React.createClass({
     render: function() {
         return (
             <div className="chat">
-                <HeaderBox contact={this.props.contact} count={this.props.messages.length} onClose={this._onClose}/>
+                <HeaderBox contact={this.props.contact} count={this.props.messages.length}
+                           onClose={this._onClose}
+                           onMinimize={this._onMinimize}/>
                 <HistoryBox contact={this.props.contact} messages={this.props.messages} />
                 <FooterBox operator={this.props.operator} contact={this.props.contact} onMessage={this._onOutMessage}/>
             </div>
@@ -1412,10 +1429,15 @@ var ConversationBox = React.createClass({
 });
 
 var EmptyConversationBox = React.createClass({
+    _onMinimize: function(){
+        if(typeof this.props.onMinimize == 'function'){
+            this.props.onMinimize();
+        }
+    },
     render: function() {
         return (
             <div className="chat">
-                <EmptyHeaderBox/>
+                <EmptyHeaderBox onMinimize={this._onMinimize}/>
                 <EmptyChatBox/>
             </div>
         );
@@ -1507,6 +1529,31 @@ var EmptyChatBox = React.createClass({
     }
 });
 
+var MinChatBox = React.createClass({
+    _maximizeClicked: function(){
+        if(typeof this.props.onMaximize == 'function'){
+            this.props.onMaximize();
+        }
+    },
+    render: function(){
+        return (
+            <div className="chat-container min-container clearfix">
+                <div className={"msg-count center-text bg-"+this.props.status}>
+                    <div className="status">
+                        You {this.props.status}
+                    </div>
+                    <div>Clients: <i className="clients-badge">{this.props.clientsCount}</i></div>
+                </div>
+                <div className="chat-info">
+                    Unread: <span className="msg-badge unread">{this.props.unreadCount}</span>
+                    <IconButton onClick={this._maximizeClicked}
+                                classes="fa fa-2x fa-plus-square maximize-icon"/>
+                </div>
+            </div>
+        )
+    }
+});
+
 var ChatBox = React.createClass({
     getInitialState: function() {
         return {
@@ -1582,6 +1629,20 @@ var ChatBox = React.createClass({
             currentContact: {}
         });
     },
+    _onMinimize: function(){
+        this.setState({
+            chatState: 'min',
+            messages:[],
+            currentContact: {}
+        });
+    },
+    _onMaximize: function(){
+        this.setState({
+            chatState: 'no-chat',
+            messages:[],
+            currentContact: {}
+        });
+    },
     onOutgoingMessage: function(data){
         var operator = this.state.operator;
         var currentContact = this.state.currentContact;
@@ -1594,6 +1655,10 @@ var ChatBox = React.createClass({
     },
     renderState: function(){
         switch(this.state.chatState || 'login'){
+            case 'min':
+                return (
+                    <MinChatBox onMaximize={this._onMaximize} status={"online"} clientsCount={0} unreadCount={0}/>
+                );
             case 'login':
                 return (
                     <div id="chat-template" className="chat-container clearfix">
@@ -1608,6 +1673,7 @@ var ChatBox = React.createClass({
                                          operator={this.state.operator}
                                          messages={this.state.messages}
                                          onClose={this.onConversationClose}
+                                         onMinimize={this._onMinimize}
                                          onOutgoingMessage={this.onOutgoingMessage} />
                     </div>
                 );
@@ -1615,7 +1681,7 @@ var ChatBox = React.createClass({
                 return (
                     <div id="chat-template" className="chat-container clearfix">
                         <ContactsBox  contacts={this.state.contacts} onSelectClient={this.selectClient}/>
-                        <EmptyConversationBox/>
+                        <EmptyConversationBox onMinimize={this._onMinimize}/>
                     </div>
                 )
         }
