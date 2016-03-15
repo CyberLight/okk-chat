@@ -100,7 +100,8 @@ var ActionTypes = {
     NEW_IN_MESSAGE: 'NEW_IN_MESSAGE',
     READ_MESSAGE: 'READ_MESSAGE',
     CONTACT_MESSAGES_SCROLL: 'CONTACT_MESSAGES_SCROLL',
-    CONTACT_FILTER: 'CONTACT_FILTER'
+    CONTACT_FILTER: 'CONTACT_FILTER',
+    CLEAR_SELECTED_CONTACT: 'CLEAR_SELECTED_CONTACT'
 };
 
 var KeyConstants = {
@@ -159,9 +160,22 @@ var UnreadChatMessageStore = objectAssign({}, EventEmitter.prototype, {
         this.removeListener(ChatConstants.MESSAGE_CHANGE_EVENT, callback);
     },
 
+    _getUnreadMessageIds: function(id){
+        return (_messages[id] && _messages[id].unreadIds) || [];
+    },
+
     getCount: function(id) {
-        var messages = ChatMessageStore.getUnreadMessageIds(id);
+        var messages = this._getUnreadMessageIds(id);
         return messages.length;
+    },
+
+    getAll: function(){
+        var allCount = 0;
+        var keys = Object.keys(_messages);
+        for(var key in keys){
+            allCount += this.getCount(keys[key]);
+        }
+        return allCount;
     }
 });
 
@@ -204,18 +218,6 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
             }
         }
         _messages[id].messages[message.id] = message;
-    },
-
-    getUnreadMessageIds: function(id){
-        var MessageStoreItem = {
-            messages: {},
-            unreadIds: [],
-            firstUnreadMsgId: null
-        };
-        if(!_messages[id]){
-            _messages[id] = MessageStoreItem;
-        }
-        return _messages[id].unreadIds;
     },
 
     emitChange: function() {
@@ -321,6 +323,11 @@ var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
         _contactFilterPattern = pattern;
     },
 
+    clearContact: function(){
+        _preActiveContactId = _activeContactId;
+        _activeContactId = null;
+    },
+
     emitChange: function() {
         this.emit(ChatConstants.CONTACTS_CHANGE_EVENT);
     },
@@ -389,6 +396,10 @@ ChatContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
         case ActionTypes.CONTACT_FILTER:
             ChatContactsStore.setFilter(action.pattern);
             ChatContactsStore.emitChange();
+            break;
+
+        case ActionTypes.CLEAR_SELECTED_CONTACT:
+            ChatContactsStore.clearContact();
             break;
 
         default:
@@ -563,6 +574,14 @@ var ClickContactAction = {
             type: ActionTypes.CLICK_CONTACT,
             prevContactId: _preActiveContactId,
             contactId: contactId
+        });
+    }
+};
+
+var ClearSelectedContactAction = {
+    createAction: function () {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.CLEAR_SELECTED_CONTACT
         });
     }
 };
@@ -1530,6 +1549,26 @@ var EmptyChatBox = React.createClass({
 });
 
 var MinChatBox = React.createClass({
+    getInitialState: function() {
+        return {
+            status: this.props.status,
+            clientsCount: this.props.clientsCount,
+            unreadCount: UnreadChatMessageStore.getAll()
+        };
+    },
+    componentDidMount: function() {
+        UnreadChatMessageStore.addChangeListener(this._onUnreadChange);
+    },
+
+    componentWillUnmount: function() {
+        UnreadChatMessageStore.removeChangeListener(this._onUnreadChange);
+    },
+    _onUnreadChange: function(){
+        var count = UnreadChatMessageStore.getAll();
+        this.setState({
+            unreadCount: count
+        })
+    },
     _maximizeClicked: function(){
         if(typeof this.props.onMaximize == 'function'){
             this.props.onMaximize();
@@ -1538,14 +1577,14 @@ var MinChatBox = React.createClass({
     render: function(){
         return (
             <div className="chat-container min-container clearfix">
-                <div className={"msg-count center-text bg-"+this.props.status}>
+                <div className={"msg-count center-text bg-"+this.state.status}>
                     <div className="status">
-                        You {this.props.status}
+                        You {this.state.status}
                     </div>
-                    <div>Clients: <i className="clients-badge">{this.props.clientsCount}</i></div>
+                    <div>Clients: <i className="clients-badge">{this.state.clientsCount}</i></div>
                 </div>
                 <div className="chat-info">
-                    Unread: <span className="msg-badge unread">{this.props.unreadCount}</span>
+                    Unread: <span className="msg-badge unread">{this.state.unreadCount}</span>
                     <IconButton onClick={this._maximizeClicked}
                                 classes="fa fa-2x fa-plus-square maximize-icon"/>
                 </div>
@@ -1628,6 +1667,7 @@ var ChatBox = React.createClass({
             messages:[],
             currentContact: {}
         });
+        ClearSelectedContactAction.createAction();
     },
     _onMinimize: function(){
         this.setState({
@@ -1635,6 +1675,7 @@ var ChatBox = React.createClass({
             messages:[],
             currentContact: {}
         });
+        ClearSelectedContactAction.createAction();
     },
     _onMaximize: function(){
         this.setState({
