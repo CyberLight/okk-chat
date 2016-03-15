@@ -75,6 +75,11 @@ var _contacts = {
     }
 };
 
+var _fullMessageImages = {
+};
+
+window._fullMessageImages = _fullMessageImages;
+
 var _activeContactId,
     _preActiveContactId,
     _contactFilterPattern = '';
@@ -84,7 +89,8 @@ var ChatConstants = {
     MESSAGE_CHANGE_EVENT: 'MESSAGE_CHANGED_EVENT',
     CONTACT_SELECT_EVENT: 'CONTACT_SELECT_EVENT',
     MESSAGE_UPDATE_EVENT: 'MESSAGE_UPDATE_EVENT',
-    CONTACTS_CHANGE_EVENT: 'CONTACTS_CHANGE_EVENT'
+    CONTACTS_CHANGE_EVENT: 'CONTACTS_CHANGE_EVENT',
+    FULL_IMAGES_CHANGE_EVENT: 'FULL_IMAGES_CHANGE_EVENT'
 };
 
 var ActionTypes = {
@@ -102,6 +108,37 @@ var KeyConstants = {
 };
 
 /*============================ Store =================================*/
+var FullImageChatStore = objectAssign({}, EventEmitter.prototype, {
+
+    emitChange: function() {
+        this.emit(ChatConstants);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    addChangeListener: function(callback) {
+        this.on(ChatConstants.FULL_IMAGES_CHANGE_EVENT, callback);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    removeChangeListener: function(callback) {
+        this.removeListener(ChatConstants.FULL_IMAGES_CHANGE_EVENT, callback);
+    },
+
+    putFullImage: function(id, b64string){
+        if(b64string) {
+            _fullMessageImages[id] = b64string;
+        }
+    },
+
+    getFullImage: function(id) {
+        return _fullMessageImages[id];
+    }
+});
+
 var UnreadChatMessageStore = objectAssign({}, EventEmitter.prototype, {
 
     emitChange: function() {
@@ -388,6 +425,8 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             );
             activeContactId = ChatContactsStore.getActive();
             ChatMessageStore.addMessage(action.receiver.name, message, activeContactId);
+            FullImageChatStore.putFullImage(message.id, action.fullImage);
+
             if(action.receiver.name == activeContactId) {
                 ChatMessageStore.emitUpdate();
             }
@@ -403,6 +442,8 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             );
             activeContactId = ChatContactsStore.getActive();
             ChatMessageStore.addMessage(action.sender, message, activeContactId);
+            FullImageChatStore.putFullImage(message.id, action.fullImage);
+
             if(action.sender == activeContactId) {
                 ChatMessageStore.emitUpdate();
             }
@@ -462,13 +503,14 @@ UnreadChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) 
 /*============================= Actions ==============================*/
 
 var OutgoingMessageAction = {
-    createMessage: function (message, sender, receiver, msgType) {
+    createMessage: function (message, sender, receiver, msgType, fullImage) {
         ChatDispatcher.dispatch({
             type: ActionTypes.NEW_OUT_MESSAGE,
             message: message,
             sender: sender,
             receiver: receiver,
-            msgType: msgType
+            msgType: msgType,
+            fullImage: fullImage
         });
         var msg = CoreUtils.createOutMessageFromRaw(
             message, sender, receiver, msgType);
@@ -486,7 +528,8 @@ var IncomingMessageAction = {
                     sender: sender,
                     receiver: receiver,
                     msgType: msgType,
-                    datetime: datetime
+                    datetime: datetime,
+                    fullImage: message
                 });
             });
         }else {
@@ -496,7 +539,8 @@ var IncomingMessageAction = {
                 sender: sender,
                 receiver: receiver,
                 msgType: msgType,
-                datetime: datetime
+                datetime: datetime,
+                fullImage: null
             });
         }
         //var msg = CoreUtils.createInMessageFromRaw(
@@ -648,6 +692,19 @@ var CoreUtils = {
             }
         };
         image.src = srcBase64;
+    },
+    downloadImage: function(fullBase64, title, nameOfFile){
+        var img = document.createElement('img');
+        img.src = fullBase64;
+
+        var a = document.createElement('a');
+        a.setAttribute("download", nameOfFile);
+        a.setAttribute("href", fullBase64);
+        a.appendChild(img);
+
+        var w = open();
+        w.document.title = title;
+        w.document.body.appendChild(a);
     }
 };
 
@@ -715,6 +772,12 @@ var UnreadMessageDelimeter = React.createClass({
 
 var UnreadIncomingMessage = React.createClass({
     scrolled: false,
+    _onDownloadMessages: function(e){
+        var message = FullImageChatStore.getFullImage(this.props.data.id);
+        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        e.preventDefault();
+        e.stopPropagation();
+    },
     renderMessage: function(data){
         if(data.contentType == 'text'){
             return (
@@ -722,7 +785,9 @@ var UnreadIncomingMessage = React.createClass({
             );
         } else if(data.contentType == 'image'){
             return (
-                <img className="image-message" src={ data.message } />
+                <a href="#" onClick={this._onDownloadMessages} >
+                    <img className="image-message" src={ data.message } />
+                </a>
             );
         }
     },
@@ -763,6 +828,12 @@ var UnreadIncomingMessage = React.createClass({
 });
 
 var UnreadOutgoingMessage = React.createClass({
+    _onDownloadMessages: function(e){
+        var message = FullImageChatStore.getFullImage(this.props.data.id);
+        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        e.preventDefault();
+        e.stopPropagation();
+    },
     renderMessage: function(data){
         if(data.contentType == 'text'){
             return (
@@ -770,7 +841,9 @@ var UnreadOutgoingMessage = React.createClass({
             );
         } else if(data.contentType == 'image'){
             return (
-                <img className="image-message" src={ data.message } />
+                <a href="#" onClick={this._onDownloadMessages} >
+                    <img className="image-message" src={ data.message } />
+                </a>
             );
         }
     },
@@ -813,6 +886,12 @@ var UnreadOutgoingMessage = React.createClass({
 
 
 var IncomingMessage = React.createClass({
+    _onDownloadMessages: function(e){
+        var message = FullImageChatStore.getFullImage(this.props.data.id);
+        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        e.preventDefault();
+        e.stopPropagation();
+    },
     renderMessage: function(data){
         if(data.contentType == 'text'){
             return (
@@ -820,7 +899,9 @@ var IncomingMessage = React.createClass({
             );
         } else if(data.contentType == 'image'){
             return (
-                <img className="image-message" src={ data.message } />
+                <a href="#" onClick={this._onDownloadMessages} >
+                    <img className="image-message" src={ data.message } />
+                </a>
             );
         }
     },
@@ -850,6 +931,12 @@ var IncomingMessage = React.createClass({
 });
 
 var OutgoingMessage = React.createClass({
+    _onDownloadMessages: function(e){
+        var message = FullImageChatStore.getFullImage(this.props.data.id);
+        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        e.preventDefault();
+        e.stopPropagation();
+    },
     operatorStatus: function () {
         if (this.props.data.operator) {
             return (
@@ -866,7 +953,9 @@ var OutgoingMessage = React.createClass({
             );
         } else if(data.contentType == 'image'){
             return (
-                <img className="image-message" src={ data.message } />
+                <a href="#" onClick={this._onDownloadMessages} >
+                    <img className="image-message" src={ data.message } />
+                </a>
             );
         }
     },
@@ -959,9 +1048,9 @@ var UploadImageButton = React.createClass({
         }
         return coefficient;
     },
-    _onUploadedBase64: function(b64string){
+    _onUploadedBase64: function(b64string, fullb64string){
         if(this.props.onImageBase64) {
-            this.props.onImageBase64(b64string);
+            this.props.onImageBase64(b64string, fullb64string);
         }
     },
     _onFileChange: function(e){
@@ -1042,12 +1131,13 @@ var FooterBox = React.createClass({
             this.sendMessage();
         }
     },
-    _onImageUpload: function(b64string){
+    _onImageUpload: function(b64string, fullBase64string){
         OutgoingMessageAction.createMessage(
             b64string,
             this.props.operator,
             this.props.contact,
-            'image'
+            'image',
+            fullBase64string
         );
     },
     render: function() {
@@ -1575,6 +1665,7 @@ function RunIncomingMessages(){
                 date);
 
         } else if(currentContentType == 'image') {
+
             IncomingMessageAction.createMessage(
                 getRandomItem(ImageMessages),
                 contact.name,
