@@ -298,6 +298,9 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
 });
 
 var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
+    getCountAll: function(){
+        return Object.keys(_contacts).length;
+    },
     getAll: function(){
         var result = [];
         if(_contactFilterPattern) {
@@ -1551,17 +1554,24 @@ var EmptyChatBox = React.createClass({
 var MinChatBox = React.createClass({
     getInitialState: function() {
         return {
-            status: this.props.status,
-            clientsCount: this.props.clientsCount,
+            clientsCount: ChatContactsStore.getCountAll(),
             unreadCount: UnreadChatMessageStore.getAll()
         };
     },
     componentDidMount: function() {
         UnreadChatMessageStore.addChangeListener(this._onUnreadChange);
+        ChatContactsStore.addChangeListener(this._onContactsChanged);
     },
 
     componentWillUnmount: function() {
         UnreadChatMessageStore.removeChangeListener(this._onUnreadChange);
+        ChatContactsStore.removeChangeListener(this._onContactsChanged);
+    },
+    _onContactsChanged: function(){
+        var count = ChatContactsStore.getCountAll();
+        this.setState({
+            clientsCount: count
+        })
     },
     _onUnreadChange: function(){
         var count = UnreadChatMessageStore.getAll();
@@ -1577,14 +1587,15 @@ var MinChatBox = React.createClass({
     render: function(){
         return (
             <div className="chat-container min-container clearfix">
-                <div className={"msg-count center-text bg-"+this.state.status}>
+                <div className={"msg-count center-text bg-"+this.props.status}>
                     <div className="status">
-                        You {this.state.status}
+                        <i className={"fa fa-circle " + this.props.status || 'offline' }></i>
+                        {this.props.status}
                     </div>
                     <div>Clients: <i className="clients-badge">{this.state.clientsCount}</i></div>
                 </div>
                 <div className="chat-info">
-                    Unread: <span className="msg-badge unread">{this.state.unreadCount}</span>
+                    New: <span className="msg-badge unread">{this.state.unreadCount}</span>
                     <IconButton onClick={this._maximizeClicked}
                                 classes="fa fa-2x fa-plus-square maximize-icon"/>
                 </div>
@@ -1601,7 +1612,8 @@ var ChatBox = React.createClass({
             messages: [],
             currentContact: {},
             operator: {
-                name: 'Ксения Оператор'
+                name: 'Ксения Оператор',
+                status: 'online'
             },
             unread: 0
         };
@@ -1698,7 +1710,8 @@ var ChatBox = React.createClass({
         switch(this.state.chatState || 'login'){
             case 'min':
                 return (
-                    <MinChatBox onMaximize={this._onMaximize} status={"online"} clientsCount={0} unreadCount={0}/>
+                    <MinChatBox onMaximize={this._onMaximize}
+                                status={this.state.operator.status}/>
                 );
             case 'login':
                 return (

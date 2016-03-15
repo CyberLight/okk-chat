@@ -303,7 +303,7 @@ body {
 
 
 .chat-container.min-container .msg-count {
-    width: 30%;
+    width: 40%;
     float: left;
     height: 50px;
     padding: 5px;
@@ -311,7 +311,7 @@ body {
 
 .chat-container.min-container .chat-info {
     background: #F2F5F8;
-    width: 70%;
+    width: 60%;
     float: left;
     height: 50px;
     color: gray;
@@ -322,16 +322,16 @@ body {
 }
 
 .chat-container.min-container .bg-online{
-    background-color: #86BB71;
+    background-color: #ACC291;
 }
 
 .chat-container.min-container .bg-offline{
-    background-color: red;
+    background-color: #E3BD68;
 }
 
 .chat-container.min-container {
     height: 50px;
-    width: 400px;
+    width: 296px;
 }
 
 .chat-container.min-container .center-text {
