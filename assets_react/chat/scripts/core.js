@@ -1499,9 +1499,9 @@ var Contact = React.createClass({
             return (
                 <span>
                 {
-                    this.state.participants.map(function (name) {
+                    this.state.participants.map(function (name, index) {
                         return (
-                            <span key={name} className="msg-badge badge-sm">{name}</span>
+                            <span key={index} className="msg-badge badge-sm">{name}</span>
                         );
                     })
                 }
