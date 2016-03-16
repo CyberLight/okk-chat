@@ -75,14 +75,15 @@ var _contacts = {
     }
 };
 
-var _fullMessageImages = {
-};
+var _fullMessageImages = {};
+var _chatParticipants = {};
 
 window._fullMessageImages = _fullMessageImages;
 
 var _activeContactId,
     _preActiveContactId,
-    _contactFilterPattern = '';
+    _contactFilterPattern = '',
+    _currentOperator;
 
 /*============================ Constants =================================*/
 var ChatConstants = {
@@ -90,7 +91,9 @@ var ChatConstants = {
     CONTACT_SELECT_EVENT: 'CONTACT_SELECT_EVENT',
     MESSAGE_UPDATE_EVENT: 'MESSAGE_UPDATE_EVENT',
     CONTACTS_CHANGE_EVENT: 'CONTACTS_CHANGE_EVENT',
-    FULL_IMAGES_CHANGE_EVENT: 'FULL_IMAGES_CHANGE_EVENT'
+    FULL_IMAGES_CHANGE_EVENT: 'FULL_IMAGES_CHANGE_EVENT',
+    OPERATOR_CHANGED: 'OPERATOR_CHANGED',
+    PARTICIPANTS_CHANGED: 'PARTICIPANTS_CHANGED'
 };
 
 var ActionTypes = {
@@ -101,7 +104,15 @@ var ActionTypes = {
     READ_MESSAGE: 'READ_MESSAGE',
     CONTACT_MESSAGES_SCROLL: 'CONTACT_MESSAGES_SCROLL',
     CONTACT_FILTER: 'CONTACT_FILTER',
-    CLEAR_SELECTED_CONTACT: 'CLEAR_SELECTED_CONTACT'
+    CLEAR_SELECTED_CONTACT: 'CLEAR_SELECTED_CONTACT',
+    AUTH_IN_ACTION: 'AUTH_IN_ACTION',
+    AUTH_SUCCESS: 'AUTH_SUCCESS',
+    AUTH_FAIL: 'AUTH_FAIL'
+};
+
+var AuthStatuses = {
+    SUCCESS: 1,
+    ERROR: 2
 };
 
 var KeyConstants = {
@@ -109,10 +120,88 @@ var KeyConstants = {
 };
 
 /*============================ Store =================================*/
+var AuthChatStore = objectAssign({}, EventEmitter.prototype, {
+
+    emitChange: function() {
+        this.emit(ChatConstants.OPERATOR_CHANGED);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    addChangeListener: function(callback) {
+        this.on(ChatConstants.OPERATOR_CHANGED, callback);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    removeChangeListener: function(callback) {
+        this.removeListener(ChatConstants.OPERATOR_CHANGED, callback);
+    },
+
+    setOperator: function(operatorData){
+       _currentOperator = operatorData;
+    },
+
+    getOperator: function() {
+        return _currentOperator;
+    },
+
+    getStatus: function(){
+        return this.status;
+    },
+
+    setStatus: function(status){
+        this.status = status;
+    }
+});
+
+
+var ParticipantsChatStore = objectAssign({}, EventEmitter.prototype, {
+
+    emitChange: function() {
+        this.emit(ChatConstants.PARTICIPANTS_CHANGED);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    addChangeListener: function(callback) {
+        this.on(ChatConstants.PARTICIPANTS_CHANGED, callback);
+    },
+
+    /**
+     * @param {function} callback
+     */
+    removeChangeListener: function(callback) {
+        this.removeListener(ChatConstants.PARTICIPANTS_CHANGED, callback);
+    },
+
+    getParticipants: function(contactId){
+        return Object.keys(_chatParticipants[contactId] || {});
+    },
+
+    addParticipantFor: function(contactId, participantId){
+        var added = false;
+
+        if(!_chatParticipants[contactId]){
+            _chatParticipants[contactId] = {};
+        }
+
+        if(participantId != contactId) {
+            _chatParticipants[contactId][participantId] = 1;
+            added = true;
+        }
+        return added;
+    }
+
+});
+
 var FullImageChatStore = objectAssign({}, EventEmitter.prototype, {
 
     emitChange: function() {
-        this.emit(ChatConstants);
+        this.emit(ChatConstants.FULL_IMAGES_CHANGE_EVENT);
     },
 
     /**
@@ -390,7 +479,38 @@ var ChatContactsStore = objectAssign({}, EventEmitter.prototype, {
 });
 
 /*============================ Dispatchers =================================*/
+AuthChatStore.dispatchToken = ChatDispatcher.register(function(action) {
+    switch (action.type) {
+        case ActionTypes.AUTH_SUCCESS:
+            AuthChatStore.setStatus(AuthStatuses.SUCCESS);
+            AuthChatStore.setOperator(action.operator);
+            AuthChatStore.emitChange();
+            break;
+        default:
+        // do nothing
+    }
+});
+
+ParticipantsChatStore.dispatchToken = ChatDispatcher.register(function(action) {
+    var added;
+    switch (action.type) {
+        case ActionTypes.NEW_IN_MESSAGE:
+        case ActionTypes.NEW_OUT_MESSAGE:
+            added = ParticipantsChatStore.addParticipantFor(action.receiver, action.sender);
+            if(added) {
+                ParticipantsChatStore.emitChange();
+            }
+            break;
+
+        default:
+        // do nothing
+    }
+});
+
 ChatContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
+    ChatDispatcher.waitFor([
+        AuthChatStore.dispatchToken
+    ]);
     switch (action.type) {
         case ActionTypes.CLICK_CONTACT:
             ChatContactsStore.setActive(action.contactId);
@@ -536,6 +656,32 @@ var OutgoingMessageAction = {
         var msg = CoreUtils.createOutMessageFromRaw(
             message, sender, receiver, msgType);
         //Отправка на сервер
+    }
+};
+
+var AuthInProgressAction = {
+    createAction: function () {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.AUTH_IN_ACTION
+        });
+    }
+};
+
+var AuthSuccessAction = {
+    createAction: function (operator) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.AUTH_SUCCESS,
+            operator: operator
+        });
+    }
+};
+
+var AuthFailAction = {
+    createAction: function (error) {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.AUTH_FAIL,
+            error: error
+        });
     }
 };
 
@@ -1318,16 +1464,19 @@ var Contact = React.createClass({
         return {
             data: this.props.data || {},
             active: false,
-            unread: unreadCount
+            unread: unreadCount,
+            participants: ''
         }
     },
 
     componentDidMount: function() {
         UnreadChatMessageStore.addChangeListener(this._onUnreadChange);
+        ParticipantsChatStore.addChangeListener(this._participantsChange);
     },
 
     componentWillUnmount: function() {
         UnreadChatMessageStore.removeChangeListener(this._onUnreadChange);
+        ParticipantsChatStore.removeChangeListener(this._participantsChange);
     },
 
     _onUnreadChange: function(){
@@ -1337,6 +1486,31 @@ var Contact = React.createClass({
         });
     },
 
+    _participantsChange: function(){
+        var data = ParticipantsChatStore.getParticipants(this.state.data.name);
+        if(data.length > 0) {
+            this.setState({
+                participants: data
+            });
+        }
+    },
+    _getParticipants: function(){
+        if(this.state.participants) {
+            return (
+                <span>
+                {
+                    this.state.participants.map(function (name) {
+                        return (
+                            <span key={name} className="msg-badge badge-sm">{name}</span>
+                        );
+                    })
+                }
+                </span>
+            );
+
+        }
+        return '';
+    },
     activateContact: function(){
         if(typeof this.props.onActivate == 'function'){
             this.props.onActivate(this.state.data);
@@ -1365,6 +1539,9 @@ var Contact = React.createClass({
                     <div className="status">
                         <i className={"fa fa-circle " + this.state.data.status || 'offline' }></i>
                         {this.state.data.status || 'offline'}
+                    </div>
+                    <div>
+                        {this._getParticipants()}
                     </div>
                     <div className="msg-unread">
                         {this.getUnreadMessageCount()}
@@ -1512,8 +1689,28 @@ var EmptyConversationBox = React.createClass({
 });
 
 var LoginBox = React.createClass({
+    componentDidMount: function() {
+        AuthChatStore.addChangeListener(this._onAuthChanged);
+    },
+
+    componentWillUnmount: function() {
+        AuthChatStore.removeChangeListener(this._onAuthChanged);
+    },
+
     getInitialState: function() {
         return {loginState: this.props.initialLoginState || 'login'};
+    },
+    _onAuthChanged: function(){
+        if(AuthChatStore.getStatus() === AuthStatuses.SUCCESS) {
+            this.successState();
+            if(typeof this.props.onAuthSuccess == 'function') {
+                setTimeout(function(){
+                    this.props.onAuthSuccess(AuthChatStore.getOperator());
+                }.bind(this), 1000);
+            }
+        }else{
+            this.tryAgainState();
+        }
     },
     progressState: function(){
         this.setState({
@@ -1530,19 +1727,9 @@ var LoginBox = React.createClass({
             loginState: 'login'
         });
     },
-    authenticateOperator: function(){
-        setTimeout(function() {
-            this.successState();
-            setTimeout(function() {
-                if(typeof this.props.onAuthSuccess == 'function') {
-                    this.props.onAuthSuccess();
-                }
-            }.bind(this), 1000); //4000
-        }.bind(this), 1500); //3000
-    },
     loginClick: function(e){
         this.progressState();
-        this.authenticateOperator();
+        ServerAPI.authOperator();
     },
     renderState: function(){
         switch(this.state.loginState){
@@ -1656,10 +1843,7 @@ var ChatBox = React.createClass({
             contacts: [],
             messages: [],
             currentContact: {},
-            operator: {
-                name: 'Ксения Оператор',
-                status: 'online'
-            },
+            operator: {},
             unread: 0
         };
     },
@@ -1703,13 +1887,13 @@ var ChatBox = React.createClass({
             messages: ChatMessageStore.getMessages(contact.name)
         });
     },
-    authSuccess: function(){
+    authSuccess: function(operator){
         this.setState({
+            operator: operator,
             chatState: 'no-chat'
         });
+
         this.loadContacts();
-        //TODO: Tests
-        RunIncomingMessages();
     },
     selectClient: function(client){
         this.setState({
@@ -1808,6 +1992,7 @@ function RunIncomingMessages(){
     ];
     var contentType = ['text', 'text', 'image'];
     var isOperator = [0,0,0,0,0,1];
+    var operatorNames = ['Лена','Валентина','Алина','Настя']
 
     function getRandomItem (arr) {
         var keys = Object.keys(arr);
@@ -1826,7 +2011,7 @@ function RunIncomingMessages(){
         var isOperatorFlag = false;
 
         if(getRandomItem(isOperator)){
-            sender = 'Лена';
+            sender = getRandomItem(operatorNames);
             receiver = contact.name;
             isOperatorFlag = true;
         }else{
@@ -1861,3 +2046,20 @@ function RunIncomingMessages(){
         index++;
     }, 2000);
 }
+
+/*============================ API ===================================*/
+
+var ExampleServerApi = objectAssign({}, Object.prototype, {
+    authOperator: function(){
+        var testOperator = {name: 'Ксения', status: 'online'};
+        AuthInProgressAction.createAction();
+        setTimeout(function() {
+            AuthSuccessAction.createAction(testOperator);
+            setTimeout(function(){
+                RunIncomingMessages();
+            }, 1000)
+        }, 1500);
+    }
+});
+
+var ServerAPI = ExampleServerApi;

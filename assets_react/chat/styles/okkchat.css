@@ -264,6 +264,10 @@ body {
     font-style: normal;
 }
 
+.msg-badge.badge-sm {
+    margin: 0 1px;
+}
+
 .unread {
     background-color: red;
 }
