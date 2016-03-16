@@ -209,15 +209,15 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
         return result;
     },
 
-    addMessage: function(id, message, activeId){
-        message.isRead = (activeId == id);
+    addMessage: function(senderId, message, activeId){
+        message.isRead = (activeId == senderId);
         if(!message.isRead){
-            _messages[id].unreadIds.push(message.id);
-            if(_messages[id].firstUnreadMsgId == null){
-                _messages[id].firstUnreadMsgId = message.id;
+            _messages[senderId].unreadIds.push(message.id);
+            if(_messages[senderId].firstUnreadMsgId == null){
+                _messages[senderId].firstUnreadMsgId = message.id;
             }
         }
-        _messages[id].messages[message.id] = message;
+        _messages[senderId].messages[message.id] = message;
     },
 
     emitChange: function() {
@@ -260,7 +260,8 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
         _lastMessageId++;
         var message = {
             id: 'm_' + _lastMessageId,
-            name: data.operator.name,
+            from: data.operator.name,
+            to: data.contact.name,
             message: data.data.message,
             contentType: data.type,
             msgType: 'out',
@@ -283,6 +284,11 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
     readMessages: function(id){
         var messages = _messages[id].messages;
         var unreadIds = _messages[id].unreadIds || (_messages[id].unreadIds = []);
+
+        var firstUnreadMsgId = _messages[id].firstUnreadMsgId;
+        if(firstUnreadMsgId){
+            messages[firstUnreadMsgId].firstUnread = false;
+        }
 
         for(var i = 0, len = unreadIds.length; i < len; i++){
             var message = messages[unreadIds[i]];
@@ -452,10 +458,11 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 action.sender,
                 action.receiver,
                 action.msgType,
-                action.datetime
+                action.datetime,
+                action.isOperator
             );
             activeContactId = ChatContactsStore.getActive();
-            ChatMessageStore.addMessage(action.sender, message, activeContactId);
+            ChatMessageStore.addMessage(action.receiver, message, activeContactId);
             FullImageChatStore.putFullImage(message.id, action.fullImage);
 
             if(action.sender == activeContactId) {
@@ -533,17 +540,18 @@ var OutgoingMessageAction = {
 };
 
 var IncomingMessageAction = {
-    createMessage: function (message, sender, receiver, msgType, datetime) {
+    createMessage: function (message, sender, receiver, msgType, datetime, isOperator) {
         if(msgType == 'image'){
             CoreUtils.getThumbnailBase64(message, function(b64string){
                 ChatDispatcher.dispatch({
                     type: ActionTypes.NEW_IN_MESSAGE,
                     message: b64string,
                     sender: sender,
-                    receiver: receiver,
+                    receiver: receiver || sender,
                     msgType: msgType,
                     datetime: datetime,
-                    fullImage: message
+                    fullImage: message,
+                    isOperator: isOperator
                 });
             });
         }else {
@@ -551,10 +559,11 @@ var IncomingMessageAction = {
                 type: ActionTypes.NEW_IN_MESSAGE,
                 message: message,
                 sender: sender,
-                receiver: receiver,
+                receiver: receiver || sender,
                 msgType: msgType,
                 datetime: datetime,
-                fullImage: null
+                fullImage: null,
+                isOperator: isOperator
             });
         }
         //var msg = CoreUtils.createInMessageFromRaw(
@@ -629,7 +638,8 @@ var CoreUtils = {
         _lastMessageId++;
         return {
             id: 'm_' + _lastMessageId,
-            name: sender.name,
+            from: sender.name,
+            to: receiver.name,
             message: message,
             contentType: msgType,
             msgType: 'out',
@@ -639,15 +649,16 @@ var CoreUtils = {
         };
     },
 
-    createInMessageFromRaw: function(message, sender, receiver, msgType, datetime){
+    createInMessageFromRaw: function(message, sender, receiver, msgType, datetime, isOperator){
         _lastMessageId++;
         return {
             id: 'm_' + _lastMessageId,
-            name: sender,
+            from: sender,
+            to: receiver,
             message: message,
             contentType: msgType,
             msgType: 'in',
-            operator: false,
+            operator: isOperator,
             datetime: CoreUtils.formatDate(new Date(datetime)),
             isRead: false
         };
@@ -767,7 +778,7 @@ var EndConversationMessage = React.createClass({
                     <span className="message-data-time">
                         {this.props.time || getCurrentTime()}, {this.props.days || 'Today'}
                     </span> &nbsp;&nbsp;
-                    <span className="message-data-name">{this.props.name || 'Not specified' }
+                    <span className="message-data-name">{this.props.from || 'Not specified' }
                         <i className="msg-badge">operator</i>
                     </span>
                     <i className="fa fa-circle me"></i>
@@ -823,6 +834,22 @@ var UnreadIncomingMessage = React.createClass({
     canScroll: function(){
         return !this.scrolled;
     },
+    _operatorStatus: function () {
+        if (this.props.data.operator) {
+            return (
+                <i className="msg-badge">operator</i>
+            );
+        } else {
+            return '';
+        }
+    },
+    _operatorMsgClasses: function(){
+        if (this.props.data.operator) {
+            return ' other-operator';
+        } else {
+            return '';
+        }
+    },
     render: function() {
         var getCurrentTime = function (dt) {
             var resultDate = new Date(dt) || new Date();
@@ -835,13 +862,14 @@ var UnreadIncomingMessage = React.createClass({
                 <div className="message-data">
                     <span className="message-data-name">
                         <i className={"fa fa-circle " + (this.props.status || 'offline')}></i>
-                        {this.props.data.name || 'Not specified'}
+                        {this.props.data.from || 'Not specified'}
+                        {this._operatorStatus()}
                     </span>
                     <span className="message-data-time">
                         {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
                     </span>
                 </div>
-                <div className="message my-message">
+                <div className={"message my-message" + this._operatorMsgClasses() }>
                     { this.renderMessage(this.props.data) }
                 </div>
             </li>
@@ -892,7 +920,7 @@ var UnreadOutgoingMessage = React.createClass({
                         {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
-                        {this.props.data.name || 'Empty sender'}
+                        {this.props.data.from || 'Empty sender'}
                         {this.operatorStatus()}
                     </span>
                     &nbsp;&nbsp;
@@ -927,6 +955,22 @@ var IncomingMessage = React.createClass({
             );
         }
     },
+    operatorStatus: function () {
+        if (this.props.data.operator) {
+            return (
+                <i className="msg-badge">operator</i>
+            );
+        } else {
+            return '';
+        }
+    },
+    _operatorMsgClasses: function(){
+        if (this.props.data.operator) {
+            return ' other-operator';
+        } else {
+            return '';
+        }
+    },
     render: function() {
         var getCurrentTime = function (dt) {
             var resultDate = new Date(dt) || new Date();
@@ -938,13 +982,14 @@ var IncomingMessage = React.createClass({
                 <div className="message-data">
                     <span className="message-data-name">
                         <i className={"fa fa-circle " + (this.props.status || 'offline')}></i>
-                        {this.props.data.name || 'Not specified'}
+                        {this.props.data.from || 'Not specified'}
+                        {this.operatorStatus()}
                     </span>
                     <span className="message-data-time">
                         {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
                     </span>
                 </div>
-                <div className="message my-message">
+                <div className={"message my-message" + this._operatorMsgClasses()}>
                     { this.renderMessage(this.props.data) }
                 </div>
             </li>
@@ -994,7 +1039,7 @@ var OutgoingMessage = React.createClass({
                         {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
-                        {this.props.data.name || 'Empty sender'}
+                        {this.props.data.from || 'Empty sender'}
                         {this.operatorStatus()}
                     </span>
                     &nbsp;&nbsp;
@@ -1762,6 +1807,7 @@ function RunIncomingMessages(){
         'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
     ];
     var contentType = ['text', 'text', 'image'];
+    var isOperator = [0,0,0,0,0,1];
 
     function getRandomItem (arr) {
         var keys = Object.keys(arr);
@@ -1775,23 +1821,41 @@ function RunIncomingMessages(){
         var date = CoreUtils.formatDate(new Date());
 
         var currentContentType = getRandomItem(contentType);
+        var sender = '';
+        var receiver = '';
+        var isOperatorFlag = false;
+
+        if(getRandomItem(isOperator)){
+            sender = 'Лена';
+            receiver = contact.name;
+            isOperatorFlag = true;
+        }else{
+            sender = contact.name;
+            receiver = '';
+            isOperatorFlag = false;
+        }
+
         if(currentContentType == 'text') {
 
             IncomingMessageAction.createMessage(
                 getRandomItem(messageResponses),
-                contact.name,
-                '',
+                sender,
+                receiver,
                 'text',
-                date);
+                date,
+                isOperatorFlag
+            );
 
         } else if(currentContentType == 'image') {
 
             IncomingMessageAction.createMessage(
                 getRandomItem(ImageMessages),
-                contact.name,
-                '',
+                sender,
+                receiver,
                 'image',
-                date);
+                date,
+                isOperatorFlag
+            );
         }
 
         index++;
