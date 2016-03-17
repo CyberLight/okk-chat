@@ -1461,11 +1461,12 @@ var HistoryBox = React.createClass({
 var Contact = React.createClass({
     getInitialState: function() {
         var unreadCount = UnreadChatMessageStore.getCount(this.props.data.name);
+        var participants = ParticipantsChatStore.getParticipants(this.props.data.name);
         return {
             data: this.props.data || {},
             active: false,
             unread: unreadCount,
-            participants: ''
+            participants: participants
         }
     },
 
