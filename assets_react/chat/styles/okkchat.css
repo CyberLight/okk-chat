@@ -464,8 +464,9 @@ body {
 }
 
 .chat .message-resolved {
-    border-bottom: dashed 2px #92959e;
-    margin-bottom: 15px;
+    border-bottom: dashed 4px #92959e;
+    margin-bottom: 30px;
+    padding-top: 8px;
 }
 
 .chat .green-icon {

@@ -561,6 +561,7 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 action.message,
                 action.sender,
                 action.receiver,
+                action.contentType,
                 action.msgType
             );
             activeContactId = ChatContactsStore.getActive();
@@ -577,6 +578,7 @@ ChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 action.message,
                 action.sender,
                 action.receiver,
+                action.contentType,
                 action.msgType,
                 action.datetime,
                 action.isOperator
@@ -644,12 +646,13 @@ UnreadChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) 
 /*============================= Actions ==============================*/
 
 var OutgoingMessageAction = {
-    createMessage: function (message, sender, receiver, msgType, fullImage) {
+    createMessage: function (message, sender, receiver, contentType, msgType, fullImage) {
         ChatDispatcher.dispatch({
             type: ActionTypes.NEW_OUT_MESSAGE,
             message: message,
             sender: sender,
             receiver: receiver,
+            contentType: contentType,
             msgType: msgType,
             fullImage: fullImage
         });
@@ -686,17 +689,18 @@ var AuthFailAction = {
 };
 
 var IncomingMessageAction = {
-    createMessage: function (message, sender, receiver, msgType, datetime, isOperator) {
-        if(msgType == 'image'){
-            CoreUtils.getThumbnailBase64(message, function(b64string){
+    createMessage: function (message, sender, receiver, contentType, msgType, datetime, isOperator) {
+        if(contentType == 'image'){
+            CoreUtils.getThumbnailBase64(message, function(b64string, fullB64Image){
                 ChatDispatcher.dispatch({
                     type: ActionTypes.NEW_IN_MESSAGE,
                     message: b64string,
                     sender: sender,
                     receiver: receiver || sender,
-                    msgType: msgType,
+                    contentType: contentType,
+                    msgType: msgType || 'in',
                     datetime: datetime,
-                    fullImage: message,
+                    fullImage: fullB64Image,
                     isOperator: isOperator
                 });
             });
@@ -706,7 +710,8 @@ var IncomingMessageAction = {
                 message: message,
                 sender: sender,
                 receiver: receiver || sender,
-                msgType: msgType,
+                contentType: contentType,
+                msgType: msgType || 'in',
                 datetime: datetime,
                 fullImage: null,
                 isOperator: isOperator
@@ -780,30 +785,30 @@ var CoreUtils = {
                 CoreUtils.padLeft(d.getSeconds())
             ].join(':');
     },
-    createOutMessageFromRaw: function(message, sender, receiver, msgType){
+    createOutMessageFromRaw: function(message, sender, receiver, contentType, msgType, datetime){
         _lastMessageId++;
         return {
             id: 'm_' + _lastMessageId,
             from: sender.name,
             to: receiver.name,
             message: message,
-            contentType: msgType,
-            msgType: 'out',
+            contentType: contentType,
+            msgType: msgType || 'out',
             operator: true,
-            datetime: CoreUtils.formatDate(new Date()),
+            datetime: (datetime && CoreUtils.formatDate(datetime)) || CoreUtils.formatDate(new Date()),
             isRead: true
         };
     },
 
-    createInMessageFromRaw: function(message, sender, receiver, msgType, datetime, isOperator){
+    createInMessageFromRaw: function(message, sender, receiver, contentType, msgType, datetime, isOperator){
         _lastMessageId++;
         return {
             id: 'm_' + _lastMessageId,
             from: sender,
             to: receiver,
             message: message,
-            contentType: msgType,
-            msgType: 'in',
+            contentType: contentType,
+            msgType: msgType || 'in',
             operator: isOperator,
             datetime: CoreUtils.formatDate(new Date(datetime)),
             isRead: false
@@ -858,6 +863,7 @@ var CoreUtils = {
 
             var ctx = canvas.getContext("2d");
             ctx.drawImage(image,0,0,canvas.width, canvas.height);
+            var fullB64string = canvas.toDataURL("image/png");
 
             coefficient = self.getCoefficient(imgWidth, imgHeight, 150);
             canvas.width = imgWidth / coefficient;
@@ -867,7 +873,7 @@ var CoreUtils = {
             var b64string = canvas.toDataURL("image/png");
             canvas = image = null;
             if(typeof cb == 'function') {
-                cb(b64string);
+                cb(b64string, fullB64string);
             }
         };
         image.src = srcBase64;
@@ -914,25 +920,94 @@ var TypingMessage = React.createClass({
 });
 
 var EndConversationMessage = React.createClass({
-    render: function() {
-        var getCurrentTime = function () {
-            return new Date().toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
-        };
+    operatorStatus: function () {
+        if (this.props.data.operator) {
+            return (
+                <i className="msg-badge">operator</i>
+            );
+        } else {
+            return '';
+        }
+    },
+    renderMessage: function(data){
         return (
-            <li className="clearfix message-resolved">
+            <div className="message-resolved"></div>
+        );
+    },
+    render: function() {
+        var getCurrentTime = function (dt) {
+            var resultDate = new Date(dt) || new Date();
+            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        };
+
+        return (
+            <li className="clearfix">
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {this.props.time || getCurrentTime()}, {this.props.days || 'Today'}
+                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
                     </span> &nbsp;&nbsp;
-                    <span className="message-data-name">{this.props.from || 'Not specified' }
-                        <i className="msg-badge">operator</i>
+                    <span className="message-data-name">
+                        {this.props.data.from || 'Empty sender'}
+                        {this.operatorStatus()}
                     </span>
-                    <i className="fa fa-circle me"></i>
+                    &nbsp;&nbsp;
+                    <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
-                <div className="message other-message float-right">
-                    <i className="fa fa-check-circle green-icon"></i>&nbsp;&nbsp;
-                    {this.props.message || 'End conversation'}
+
+                { this.renderMessage(this.props.data) }
+
+            </li>
+        );
+    }
+});
+
+var UnreadEndConversationMessage = React.createClass({
+    scrolled: false,
+    scrollIntoViewIfNeeded: function (parent, centerIfNeeded) {
+        if(!this.scrolled) {
+            var node = ReactDOM.findDOMNode(this);
+            CoreUtils.scrollIntoViewNeeded(parent, node, centerIfNeeded);
+            this.scrolled = true;
+        }
+    },
+    canScroll: function(){
+        return !this.scrolled;
+    },
+    renderMessage: function(data){
+        return (
+            <div className="message-resolved"></div>
+        );
+    },
+    operatorStatus: function () {
+        if (this.props.data.operator) {
+            return (
+                <i className="msg-badge">operator</i>
+            );
+        } else {
+            return '';
+        }
+    },
+    render: function() {
+        var getCurrentTime = function (dt) {
+            var resultDate = new Date(dt) || new Date();
+            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        };
+
+        return (
+            <li className="message-container clearfix messages-unread">
+                <span className="mark">New messages</span>
+                <div className="message-data align-right">
+                    <span className="message-data-time">
+                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                    </span> &nbsp;&nbsp;
+                    <span className="message-data-name">
+                        {this.props.data.from || 'Empty sender'}
+                        {this.operatorStatus()}
+                    </span>
+                    &nbsp;&nbsp;
+                    <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
+                    { this.renderMessage(this.props.data) }
             </li>
         );
     }
@@ -1341,10 +1416,20 @@ var FooterBox = React.createClass({
                 this.state.value,
                 this.props.operator,
                 this.props.contact,
-                'text'
+                'text',
+                'out'
             );
             this.setState({value: ''});
         }
+    },
+    sendEndMessage: function(e){
+        OutgoingMessageAction.createMessage(
+            'End of conversation',
+            this.props.operator,
+            this.props.contact,
+            'text',
+            'end-of-talking'
+        );
     },
     handleChange: function(event){
         this.setState({value: event.target.value});
@@ -1360,6 +1445,7 @@ var FooterBox = React.createClass({
             this.props.operator,
             this.props.contact,
             'image',
+            'out',
             fullBase64string
         );
     },
@@ -1376,7 +1462,7 @@ var FooterBox = React.createClass({
                 <IconButton classes="fa fa-file-o"/>&nbsp;&nbsp;&nbsp;
                 <UploadImageButton onImageBase64={this._onImageUpload} classes="fa fa-file-image-o"/>
                 <HistoryButton onClick={this.sendMessage} title="send" icons="fa fa-paper-plane-o" classes="btn-send"/>
-                <HistoryButton title="end" icons="fa fa-comments" classes="btn-replied"/>
+                <HistoryButton onClick={this.sendEndMessage} title="end" icons="fa fa-comments" classes="btn-replied"/>
             </div>
         );
     }
@@ -1414,7 +1500,22 @@ var HistoryBox = React.createClass({
                     <OutgoingMessage key={message.id}
                                      data={message}
                                      status={contact.status}/>
-                )
+                );
+            case 'end-of-talking':
+                if(message.firstUnread){
+                    return (
+                        <UnreadEndConversationMessage ref="unreadItem"
+                                                key={message.id}
+                                                data={message}
+                                                status={contact.status} />
+                    )
+                }
+                return (
+                    <EndConversationMessage key={message.id}
+                                            data={message}
+                                            status={contact.status} />
+                );
+
         }
     },
     _scrollToFirstUnread: function(){
@@ -1993,7 +2094,8 @@ function RunIncomingMessages(){
     ];
     var contentType = ['text', 'text', 'image'];
     var isOperator = [0,0,0,0,0,1];
-    var operatorNames = ['Лена','Валентина','Алина','Настя']
+    var endIncomingMessages = [1];
+    var operatorNames = ['Лена','Валентина','Алина','Настя'];
 
     function getRandomItem (arr) {
         var keys = Object.keys(arr);
@@ -2010,11 +2112,18 @@ function RunIncomingMessages(){
         var sender = '';
         var receiver = '';
         var isOperatorFlag = false;
+        var msgType = 'in';
 
         if(getRandomItem(isOperator)){
             sender = getRandomItem(operatorNames);
             receiver = contact.name;
             isOperatorFlag = true;
+            var endConversationFlag = getRandomItem(endIncomingMessages);
+            if(endConversationFlag && currentContentType != 'image'){
+                msgType = 'end-of-talking';
+            }else{
+                msgType = 'in';
+            }
         }else{
             sender = contact.name;
             receiver = '';
@@ -2028,6 +2137,7 @@ function RunIncomingMessages(){
                 sender,
                 receiver,
                 'text',
+                msgType,
                 date,
                 isOperatorFlag
             );
@@ -2039,6 +2149,7 @@ function RunIncomingMessages(){
                 sender,
                 receiver,
                 'image',
+                'in',
                 date,
                 isOperatorFlag
             );
