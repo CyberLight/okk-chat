@@ -118,7 +118,8 @@ var ActionTypes = {
     CLEAR_SELECTED_CONTACT: 'CLEAR_SELECTED_CONTACT',
     AUTH_IN_ACTION: 'AUTH_IN_ACTION',
     AUTH_SUCCESS: 'AUTH_SUCCESS',
-    AUTH_FAIL: 'AUTH_FAIL'
+    AUTH_FAIL: 'AUTH_FAIL',
+    LOAD_CONTACTS_ACTION: 'LOAD_CONTACTS_ACTION'
 };
 
 var AuthStatuses = {
@@ -656,8 +657,8 @@ UnreadChatMessageStore.dispatchToken = ChatDispatcher.register(function(action) 
 
 /*============================= Actions ==============================*/
 
-var OutgoingMessageAction = {
-    createMessage: function (message, sender, receiver, contentType, msgType, fullImage) {
+var ChatActions = {
+    outgoingMessage: function (message, sender, receiver, contentType, msgType, fullImage) {
         ChatDispatcher.dispatch({
             type: ActionTypes.NEW_OUT_MESSAGE,
             message: message,
@@ -670,37 +671,35 @@ var OutgoingMessageAction = {
         var msg = CoreUtils.createOutMessageFromRaw(
             message, sender, receiver, msgType);
         //Отправка на сервер
-    }
-};
+    },
 
-var AuthInProgressAction = {
-    createAction: function () {
+    loadContacts: function () {
+        ChatDispatcher.dispatch({
+            type: ActionTypes.LOAD_CONTACTS_ACTION
+        });
+    },
+
+    authInProgress: function () {
         ChatDispatcher.dispatch({
             type: ActionTypes.AUTH_IN_ACTION
         });
-    }
-};
+    },
 
-var AuthSuccessAction = {
-    createAction: function (operator) {
+    authSuccess: function (operator) {
         ChatDispatcher.dispatch({
             type: ActionTypes.AUTH_SUCCESS,
             operator: operator
         });
-    }
-};
+    },
 
-var AuthFailAction = {
-    createAction: function (error) {
+    authFail: function (error) {
         ChatDispatcher.dispatch({
             type: ActionTypes.AUTH_FAIL,
             error: error
         });
-    }
-};
+    },
 
-var IncomingMessageAction = {
-    createMessage: function (message, sender, receiver, contentType, msgType, datetime, isOperator) {
+    incomingMessage: function (message, sender, receiver, contentType, msgType, datetime, isOperator) {
         if(contentType == MessageContentTypes.IMAGE){
             CoreUtils.getThumbnailBase64(message, function(b64string, fullB64Image){
                 ChatDispatcher.dispatch({
@@ -730,54 +729,44 @@ var IncomingMessageAction = {
         }
         //var msg = CoreUtils.createInMessageFromRaw(
         //    message, sender, receiver, msgType);
-    }
-};
+    },
 
-var ReadMessageAction = {
-    createAction: function (contactId) {
+    readMessage: function (contactId) {
         ChatDispatcher.dispatch({
             type: ActionTypes.READ_MESSAGE,
             contactId: contactId
         });
-    }
-};
+    },
 
-var ClickContactAction = {
-    createAction: function (contactId) {
+    clickContact: function (contactId) {
         ChatDispatcher.dispatch({
             type: ActionTypes.CLICK_CONTACT,
             prevContactId: _preActiveContactId,
             contactId: contactId
         });
-    }
-};
+    },
 
-var ClearSelectedContactAction = {
-    createAction: function () {
+    clearSelected: function () {
         ChatDispatcher.dispatch({
             type: ActionTypes.CLEAR_SELECTED_CONTACT
         });
-    }
-};
+    },
 
-var MessagesScrollAction = {
-    createAction: function (contactId, scrollTopValue) {
+    messagesScroll: function (contactId, scrollTopValue) {
         ChatDispatcher.dispatch({
             type: ActionTypes.CONTACT_MESSAGES_SCROLL,
             contactId: contactId,
             scrollTopValue: scrollTopValue
         });
-    }
-};
-
-var FilterMessageAction = {
-    createAction: function (pattern) {
+    },
+    contactFilter: function (pattern) {
         ChatDispatcher.dispatch({
             type: ActionTypes.CONTACT_FILTER,
             pattern: pattern
         });
     }
 };
+
 /*============================= Utils ==============================*/
 
 var CoreUtils = {
@@ -1423,7 +1412,7 @@ var FooterBox = React.createClass({
     },
     sendMessage: function(e){
         if(this.state.value.trim() !== '') {
-            OutgoingMessageAction.createMessage(
+            ChatActions.outgoingMessage(
                 this.state.value,
                 this.props.operator,
                 this.props.contact,
@@ -1434,7 +1423,7 @@ var FooterBox = React.createClass({
         }
     },
     sendEndMessage: function(e){
-        OutgoingMessageAction.createMessage(
+        ChatActions.outgoingMessage(
             'End of conversation',
             this.props.operator,
             this.props.contact,
@@ -1451,7 +1440,7 @@ var FooterBox = React.createClass({
         }
     },
     _onImageUpload: function(b64string, fullBase64string){
-        OutgoingMessageAction.createMessage(
+        ChatActions.outgoingMessage(
             b64string,
             this.props.operator,
             this.props.contact,
@@ -1667,8 +1656,8 @@ var Contact = React.createClass({
 
 var ContactsListBox = React.createClass({
     onActivateContact: function(contact){
-        ClickContactAction.createAction(contact.name);
-        ReadMessageAction.createAction(contact.name);
+        ChatActions.clickContact(contact.name);
+        ChatActions.readMessage(contact.name);
     },
     render: function() {
         var selectedId = this.props.current ? this.props.current.name : null;
@@ -1736,13 +1725,13 @@ var ContactSearchBox = React.createClass({
 
 var ContactsBox = React.createClass({
     _onSearch: function(pattern){
-        FilterMessageAction.createAction(pattern);
+        ChatActions.contactFilter(pattern);
     },
     _onClear: function(){
-        FilterMessageAction.createAction("");
+        ChatActions.contactFilter("");
     },
     _onLiveSearch: function(pattern){
-        FilterMessageAction.createAction(pattern);
+        ChatActions.contactFilter(pattern);
     },
     render: function() {
         return (
@@ -2021,7 +2010,7 @@ var ChatBox = React.createClass({
             messages:[],
             currentContact: {}
         });
-        ClearSelectedContactAction.createAction();
+        ChatActions.clearSelected();
     },
     _onMinimize: function(){
         this.setState({
@@ -2029,7 +2018,7 @@ var ChatBox = React.createClass({
             messages:[],
             currentContact: {}
         });
-        ClearSelectedContactAction.createAction();
+        ChatActions.clearSelected();
     },
     _onMaximize: function(){
         this.setState({
@@ -2143,7 +2132,7 @@ function RunIncomingMessages(){
 
         if(currentContentType == MessageContentTypes.TEXT) {
 
-            IncomingMessageAction.createMessage(
+            ChatActions.incomingMessage(
                 getRandomItem(messageResponses),
                 sender,
                 receiver,
@@ -2155,7 +2144,7 @@ function RunIncomingMessages(){
 
         } else if(currentContentType == MessageContentTypes.IMAGE) {
 
-            IncomingMessageAction.createMessage(
+            ChatActions.incomingMessage(
                 getRandomItem(ImageMessages),
                 sender,
                 receiver,
@@ -2175,9 +2164,9 @@ function RunIncomingMessages(){
 var ExampleServerApi = objectAssign({}, Object.prototype, {
     authOperator: function(){
         var testOperator = {name: 'Ксения', status: 'online'};
-        AuthInProgressAction.createAction();
+        ChatActions.authInProgress();
         setTimeout(function() {
-            AuthSuccessAction.createAction(testOperator);
+            ChatActions.authSuccess(testOperator);
             setTimeout(function(){
                 RunIncomingMessages();
             }, 1000)
