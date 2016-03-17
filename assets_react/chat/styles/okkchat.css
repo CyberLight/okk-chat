@@ -155,10 +155,10 @@ body {
     background: #86BB71;
 }
 .chat .chat-history .my-message.other-operator {
-    background: #e38968;
+    background: rgba(190, 189, 0, 0.69);
 }
 .chat .chat-history .my-message.other-operator:after {
-    border-bottom-color: #e38968;
+    border-bottom-color: rgba(190, 189, 0, 0.69);
 }
 .chat .chat-history .other-message {
     background: #94C2ED;
