@@ -86,6 +86,17 @@ var _activeContactId,
     _currentOperator;
 
 /*============================ Constants =================================*/
+var MessageContentTypes = {
+    IMAGE: 'image',
+    TEXT: 'text'
+};
+
+var MessageTypes = {
+    INCOMING: 'in',
+    OUTGOING: 'out',
+    END_OF_CONVERSATION: 'end-of-conversation'
+};
+
 var ChatConstants = {
     MESSAGE_CHANGE_EVENT: 'MESSAGE_CHANGED_EVENT',
     CONTACT_SELECT_EVENT: 'CONTACT_SELECT_EVENT',
@@ -353,7 +364,7 @@ var ChatMessageStore = objectAssign({}, EventEmitter.prototype, {
             to: data.contact.name,
             message: data.data.message,
             contentType: data.type,
-            msgType: 'out',
+            msgType: MessageTypes.OUTGOING,
             operator: true,
             datetime: CoreUtils.formatDate(new Date()),
             isRead: true
@@ -690,7 +701,7 @@ var AuthFailAction = {
 
 var IncomingMessageAction = {
     createMessage: function (message, sender, receiver, contentType, msgType, datetime, isOperator) {
-        if(contentType == 'image'){
+        if(contentType == MessageContentTypes.IMAGE){
             CoreUtils.getThumbnailBase64(message, function(b64string, fullB64Image){
                 ChatDispatcher.dispatch({
                     type: ActionTypes.NEW_IN_MESSAGE,
@@ -698,7 +709,7 @@ var IncomingMessageAction = {
                     sender: sender,
                     receiver: receiver || sender,
                     contentType: contentType,
-                    msgType: msgType || 'in',
+                    msgType: msgType || MessageTypes.INCOMING,
                     datetime: datetime,
                     fullImage: fullB64Image,
                     isOperator: isOperator
@@ -711,7 +722,7 @@ var IncomingMessageAction = {
                 sender: sender,
                 receiver: receiver || sender,
                 contentType: contentType,
-                msgType: msgType || 'in',
+                msgType: msgType || MessageTypes.INCOMING,
                 datetime: datetime,
                 fullImage: null,
                 isOperator: isOperator
@@ -808,7 +819,7 @@ var CoreUtils = {
             to: receiver,
             message: message,
             contentType: contentType,
-            msgType: msgType || 'in',
+            msgType: msgType || MessageTypes.INCOMING,
             operator: isOperator,
             datetime: CoreUtils.formatDate(new Date(datetime)),
             isRead: false
@@ -1033,11 +1044,11 @@ var UnreadIncomingMessage = React.createClass({
         e.stopPropagation();
     },
     renderMessage: function(data){
-        if(data.contentType == 'text'){
+        if(data.contentType == MessageContentTypes.TEXT){
             return (
                 data.message || 'Empty message'
             );
-        } else if(data.contentType == 'image'){
+        } else if(data.contentType == MessageContentTypes.IMAGE){
             return (
                 <a href="#" onClick={this._onDownloadMessages} >
                     <img className="image-message" src={ data.message } />
@@ -1106,11 +1117,11 @@ var UnreadOutgoingMessage = React.createClass({
         e.stopPropagation();
     },
     renderMessage: function(data){
-        if(data.contentType == 'text'){
+        if(data.contentType == MessageContentTypes.TEXT){
             return (
                 data.message || 'Empty message'
             );
-        } else if(data.contentType == 'image'){
+        } else if(data.contentType == MessageContentTypes.IMAGE){
             return (
                 <a href="#" onClick={this._onDownloadMessages} >
                     <img className="image-message" src={ data.message } />
@@ -1164,11 +1175,11 @@ var IncomingMessage = React.createClass({
         e.stopPropagation();
     },
     renderMessage: function(data){
-        if(data.contentType == 'text'){
+        if(data.contentType == MessageContentTypes.TEXT){
             return (
                 data.message || 'Empty message'
             );
-        } else if(data.contentType == 'image'){
+        } else if(data.contentType == MessageContentTypes.IMAGE){
             return (
                 <a href="#" onClick={this._onDownloadMessages} >
                     <img className="image-message" src={ data.message } />
@@ -1235,11 +1246,11 @@ var OutgoingMessage = React.createClass({
         }
     },
     renderMessage: function(data){
-        if(data.contentType == 'text'){
+        if(data.contentType == MessageContentTypes.TEXT){
             return (
                 data.message || 'Empty message'
             );
-        } else if(data.contentType == 'image'){
+        } else if(data.contentType == MessageContentTypes.IMAGE){
             return (
                 <a href="#" onClick={this._onDownloadMessages} >
                     <img className="image-message" src={ data.message } />
@@ -1416,8 +1427,8 @@ var FooterBox = React.createClass({
                 this.state.value,
                 this.props.operator,
                 this.props.contact,
-                'text',
-                'out'
+                MessageContentTypes.TEXT,
+                MessageTypes.OUTGOING
             );
             this.setState({value: ''});
         }
@@ -1427,8 +1438,8 @@ var FooterBox = React.createClass({
             'End of conversation',
             this.props.operator,
             this.props.contact,
-            'text',
-            'end-of-talking'
+            MessageContentTypes.TEXT,
+            MessageTypes.END_OF_CONVERSATION
         );
     },
     handleChange: function(event){
@@ -1444,8 +1455,8 @@ var FooterBox = React.createClass({
             b64string,
             this.props.operator,
             this.props.contact,
-            'image',
-            'out',
+            MessageContentTypes.IMAGE,
+            MessageTypes.OUTGOING,
             fullBase64string
         );
     },
@@ -1473,7 +1484,7 @@ var HistoryBox = React.createClass({
     renderMessage: function(message){
         var contact = this.props.contact;
         switch(message.msgType){
-            case 'in':
+            case MessageTypes.INCOMING:
                 if(message.firstUnread){
                     return (
                         <UnreadIncomingMessage ref="unreadItem"
@@ -1487,7 +1498,7 @@ var HistoryBox = React.createClass({
                                      data={message}
                                      status={contact.status} />
                 );
-            case 'out':
+            case MessageTypes.OUTGOING:
                 if(message.firstUnread){
                     return (
                         <UnreadOutgoingMessage ref="unreadItem"
@@ -1501,7 +1512,7 @@ var HistoryBox = React.createClass({
                                      data={message}
                                      status={contact.status}/>
                 );
-            case 'end-of-talking':
+            case MessageTypes.END_OF_CONVERSATION:
                 if(message.firstUnread){
                     return (
                         <UnreadEndConversationMessage ref="unreadItem"
@@ -2034,7 +2045,7 @@ var ChatBox = React.createClass({
             contact: currentContact,
             operator: operator,
             data: data,
-            type: 'text'
+            type: MessageContentTypes.TEXT
         });
     },
     renderState: function(){
@@ -2092,7 +2103,7 @@ function RunIncomingMessages(){
         'What is the object-oriented way to become wealthy? Inheritance.',
         'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
     ];
-    var contentType = ['text', 'text', 'image'];
+    var contentType = [MessageContentTypes.TEXT, MessageContentTypes.TEXT, MessageContentTypes.IMAGE];
     var isOperator = [0,0,0,0,0,1];
     var endIncomingMessages = [1];
     var operatorNames = ['Лена','Валентина','Алина','Настя'];
@@ -2112,17 +2123,17 @@ function RunIncomingMessages(){
         var sender = '';
         var receiver = '';
         var isOperatorFlag = false;
-        var msgType = 'in';
+        var msgType = MessageTypes.INCOMING;
 
         if(getRandomItem(isOperator)){
             sender = getRandomItem(operatorNames);
             receiver = contact.name;
             isOperatorFlag = true;
             var endConversationFlag = getRandomItem(endIncomingMessages);
-            if(endConversationFlag && currentContentType != 'image'){
-                msgType = 'end-of-talking';
+            if(endConversationFlag && currentContentType != MessageContentTypes.IMAGE){
+                msgType = MessageTypes.END_OF_CONVERSATION;
             }else{
-                msgType = 'in';
+                msgType = MessageTypes.INCOMING;
             }
         }else{
             sender = contact.name;
@@ -2130,7 +2141,7 @@ function RunIncomingMessages(){
             isOperatorFlag = false;
         }
 
-        if(currentContentType == 'text') {
+        if(currentContentType == MessageContentTypes.TEXT) {
 
             IncomingMessageAction.createMessage(
                 getRandomItem(messageResponses),
@@ -2142,14 +2153,14 @@ function RunIncomingMessages(){
                 isOperatorFlag
             );
 
-        } else if(currentContentType == 'image') {
+        } else if(currentContentType == MessageContentTypes.IMAGE) {
 
             IncomingMessageAction.createMessage(
                 getRandomItem(ImageMessages),
                 sender,
                 receiver,
-                'image',
-                'in',
+                MessageContentTypes.IMAGE,
+                MessageTypes.INCOMING,
                 date,
                 isOperatorFlag
             );
