@@ -1,0 +1,34 @@
+{
+  "name": "okk-chat",
+  "version": "1.0.0",
+  "description": "React.js okk chat",
+  "main": "gulpfile.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CyberLight/okk-chat.git"
+  },
+  "keywords": [
+    "Okk",
+    "Chat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/CyberLight/okk-chat/issues"
+  },
+  "homepage": "https://github.com/CyberLight/okk-chat#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "gulp": "^3.9.1",
+    "gulp-browserify": "^0.5.1",
+    "gulp-clean": "^0.3.2",
+    "gulp-concat": "^2.6.0",
+    "gulp-html-replace": "^1.5.5",
+    "gulp-react": "^3.1.0",
+    "gulp-styl": "^1.1.0",
+    "gulp-uglify": "^1.5.3"
+  }
+}
