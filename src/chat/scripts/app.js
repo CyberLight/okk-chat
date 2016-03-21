@@ -901,12 +901,6 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                 MessageStore.emitUpdate();
             }
             break;
-        case ActionTypes.READ_MESSAGES:
-            var readed = MessageStore.readMessages(action.contactId);
-            if(readed) {
-                UnreadMessageStore.emitChange();
-            }
-            break;
         case ActionTypes.NEW_OUT_MESSAGE:
             var outMsg = action.payload;
             message = CoreUtils.mapMessageFromRaw(outMsg, true);
@@ -958,7 +952,10 @@ UnreadMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 
     switch (action.type) {
         case ActionTypes.READ_MESSAGES:
-            UnreadMessageStore.emitChange();
+            var readed = MessageStore.readMessages(action.contactId);
+            if(readed) {
+                UnreadMessageStore.emitChange();
+            }
             break;
         case ActionTypes.NEW_OUT_MESSAGE:
             UnreadMessageStore.emitChange();

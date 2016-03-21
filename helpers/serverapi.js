@@ -140,14 +140,14 @@ function OkkChatReady(OkkChatApi) {
             }.bind(this), 3000);
         },
         runFakeMessageLoop: function(){
+            var contacts = OkkChatApi.Stores.ContactsStore.getAll();
             setInterval(function () {
-                var contacts = OkkChatApi.Stores.ContactsStore.getAll();
                 var message = FakeMessagesGenerator.generateOne(getRandomItem(contacts).name);
                 OkkChatApi.Actions.incomingMessage(message);
             }.bind(this), 5000);
         },
         sendMessageToServer: function(msg){
-            console.log('sending message: ', msg);
+
         }
     });
 
