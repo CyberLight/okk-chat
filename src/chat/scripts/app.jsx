@@ -1407,7 +1407,8 @@ var EmptyMinChatBox = React.createClass({
     render: function(){
         return (
             <div className="chat-container min-container clearfix">
-                <div className={"msg-count center-text bg-"+this.props.status}>
+                <div className="msg-count-empty center-text">
+                    {'Chat'}
                 </div>
                 <div className="chat-info">
                     <IconButton onClick={this._maximizeClicked}

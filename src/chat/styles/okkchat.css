@@ -322,6 +322,14 @@ body {
     padding: 5px;
 }
 
+.chat-container.min-container .msg-count-empty {
+    width: 40%;
+    float: left;
+    height: 50px;
+    line-height: 2.7em;
+    font-size: 18px;
+}
+
 .chat-container.min-container .chat-info {
     background: #F2F5F8;
     width: 60%;
