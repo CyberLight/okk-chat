@@ -1398,6 +1398,27 @@ var MinChatBox = React.createClass({
 });
 
 
+var EmptyMinChatBox = React.createClass({
+    _maximizeClicked: function(){
+        if(typeof this.props.onMaximize == 'function'){
+            this.props.onMaximize();
+        }
+    },
+    render: function(){
+        return (
+            <div className="chat-container min-container clearfix">
+                <div className={"msg-count center-text bg-"+this.props.status}>
+                </div>
+                <div className="chat-info">
+                    <IconButton onClick={this._maximizeClicked}
+                                classes="fa fa-2x fa-plus-square maximize-icon"/>
+                </div>
+            </div>
+        )
+    }
+});
+
+
 var LoginBox = React.createClass({
     componentDidMount: function() {
         AuthStore.addChangeListener(this._onAuthChanged);
@@ -1422,19 +1443,33 @@ var LoginBox = React.createClass({
             this.tryAgainState();
         }
     },
+    _onMinimize: function(){
+        this.setState({
+            loginState: 'min',
+            originalState: this.state.loginState
+        });
+    },
+    _onMaximize: function(){
+        this.setState({
+            loginState: this.state.originalState
+        });
+    },
     progressState: function(){
         this.setState({
-            loginState: 'progress'
+            loginState: 'progress',
+            originalState: 'progress'
         });
     },
     successState: function(){
         this.setState({
-            loginState: 'success'
+            loginState: 'success',
+            originalState: 'success'
         });
     },
     tryAgainState: function(){
         this.setState({
-            loginState: 'login'
+            loginState: 'login',
+            originalState: 'login'
         });
     },
     loginClick: function(e){
@@ -1443,42 +1478,51 @@ var LoginBox = React.createClass({
     },
     renderState: function(){
         switch(this.state.loginState){
+            case 'min':
+                return (
+                    <EmptyMinChatBox onMaximize={this._onMaximize}/>
+                );
             case 'login':
                 return (
-                    <div className="wrapper">
-                        <button className="login-btn" onClick={this.loginClick}>
-                            <i className="chat-spinner"></i>
-                            <span className="state">Log in</span>
-                        </button>
+                    <div className="chat">
+                        <EmptyHeaderBox onMinimize={this._onMinimize}/>
+                        <div className="wrapper">
+                            <button className="login-btn" onClick={this.loginClick}>
+                                <i className="chat-spinner"></i>
+                                <span className="state">Log in</span>
+                            </button>
+                        </div>
                     </div>
                 );
             case 'progress':
                 return (
-                    <div className="wrapper loading">
-                        <button className="login-btn">
-                            <i className="chat-spinner"></i>
-                            <span className="state">Authenticating</span>
-                        </button>
+                    <div className="chat">
+                        <EmptyHeaderBox onMinimize={this._onMinimize}/>
+                        <div className="wrapper loading">
+                            <button className="login-btn">
+                                <i className="chat-spinner"></i>
+                                <span className="state">Authenticating</span>
+                            </button>
+                        </div>
                     </div>
                 );
             case 'success':
                 return (
-                    <div className="wrapper ok loading">
-                        <button className="login-btn">
-                            <i className="chat-spinner"></i>
-                            <span className="state">Welcome back!</span>
-                        </button>
+                    <div className="chat">
+                        <EmptyHeaderBox onMinimize={this._onMinimize}/>
+                        <div className="wrapper ok loading">
+                            <button className="login-btn">
+                                <i className="chat-spinner"></i>
+                                <span className="state">Welcome back!</span>
+                            </button>
+                        </div>
                     </div>
                 );
 
         }
     },
     render: function() {
-        return (
-            <div className="chat">
-                {this.renderState()}
-            </div>
-        )
+        return this.renderState();
     }
 });
 
