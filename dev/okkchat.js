@@ -4,8 +4,6 @@ var _contacts = {};
 var _fullMessageImages = {};
 var _chatParticipants = {};
 
-window._messages = _messages;
-
 var _activeContactId,
     _preActiveContactId,
     _contactFilterPattern = '',
