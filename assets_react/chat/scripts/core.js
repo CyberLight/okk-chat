@@ -508,7 +508,7 @@ ParticipantsChatStore.dispatchToken = ChatDispatcher.register(function(action) {
     switch (action.type) {
         case ActionTypes.NEW_IN_MESSAGE:
         case ActionTypes.NEW_OUT_MESSAGE:
-            added = ParticipantsChatStore.addParticipantFor(action.receiver, action.sender);
+            added = ParticipantsChatStore.addParticipant(action.receiver, action.sender);
             if(added) {
                 ParticipantsChatStore.emitChange();
             }

@@ -130,12 +130,12 @@ function OkkChatReady(OkkChatApi) {
         },
         loadRawContactMessages: function (contactId) {
             setTimeout(function () {
-                var count = 30; //Math.floor(Math.random() * 30);
+                var count = 30;
                 var rawMessages = FakeMessagesGenerator.generate(contactId, count);
                 var operator = OkkChatApi.Stores.AuthStore.getOperator();
                 OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, rawMessages);
                 OkkChatApi.Stores.MessageStore.emitUpdate();
-                OkkChatApi.Stores.ContactsStore.setLoadingState(contactId, 'loaded');
+                OkkChatApi.Stores.ContactsStore.setLoadedState(contactId);
                 ServerAPI.popQueue(contactId);
             }.bind(this), 3000);
         },
@@ -145,11 +145,18 @@ function OkkChatReady(OkkChatApi) {
                 var message = FakeMessagesGenerator.generateOne(getRandomItem(contacts).name);
                 OkkChatApi.Actions.incomingMessage(message);
             }.bind(this), 5000);
+        },
+        sendMessageToServer: function(msg){
+            console.log('sending message: ', msg);
         }
     });
 
     ServerAPI.dispatchToken = OkkChatApi.Dispatcher.register(function (action) {
         switch (action.type) {
+            case OkkChatApi.ActionTypes.NEW_OUT_MESSAGE:
+                var msg = action.payload;
+                ServerAPI.sendMessageToServer(msg);
+                break;
             case OkkChatApi.ActionTypes.API_FETCH_CONTACTS:
                 ServerAPI.loadContacts();
                 ServerAPI.runFakeMessageLoop();

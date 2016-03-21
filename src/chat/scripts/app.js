@@ -83,15 +83,27 @@ var CoreUtils = {
         var  len = (String(base || 10).length - String(num).length)+1;
         return len > 0? new Array(len).join(chr || '0')+num : num;
     },
+    getCurrentTime: function (dt) {
+        var resultDate = new Date(dt) || new Date();
+        return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+    },
     formatDate: function(d){
+        var dt;
+        if(typeof d == "string") {
+            dt = new Date(d);
+        }else if(typeof d == 'object' && d.constructor == Date ){
+            dt = d;
+        }else{
+            dt = new Date();
+        }
         return [
-                d.getFullYear(),
-                CoreUtils.padLeft(d.getMonth() + 1),
-                CoreUtils.padLeft(d.getDate())].join('-') +
+                dt.getFullYear(),
+                CoreUtils.padLeft(dt.getMonth() + 1),
+                CoreUtils.padLeft(dt.getDate())].join('-') +
             ' ' + [
-                CoreUtils.padLeft(d.getHours()),
-                CoreUtils.padLeft(d.getMinutes()),
-                CoreUtils.padLeft(d.getSeconds())
+                CoreUtils.padLeft(dt.getHours()),
+                CoreUtils.padLeft(dt.getMinutes()),
+                CoreUtils.padLeft(dt.getSeconds())
             ].join(':');
     },
     mapMessageFromRaw: function(raw, isRead, operatorName){
@@ -101,15 +113,6 @@ var CoreUtils = {
             raw.messageType = raw.sender != operatorName
                 ? MessageTypes.INCOMING
                 : MessageTypes.OUTGOING;
-        }
-
-        var date = null;
-        if(typeof raw.date == "string") {
-            date = CoreUtils.formatDate(new Date(raw.date));
-        }else if(typeof raw.date == 'object' && raw.date.constructor == Date ){
-            date = CoreUtils.formatDate(raw.date);
-        }else{
-            date = CoreUtils.formatDate(new Date());
         }
 
         if (!raw.receiver) {
@@ -124,27 +127,13 @@ var CoreUtils = {
             contentType: raw.contentType,
             messageType: raw.messageType,
             operator: raw.operator,
-            datetime: date,
+            date: raw.date,
             isRead: !!isRead
         };
 
         return result;
     },
 
-    createInMessageFromRaw: function(message, sender, receiver, contentType, messageType, datetime, isOperator){
-        _lastMessageId++;
-        return {
-            id: 'm_' + _lastMessageId,
-            from: sender,
-            to: receiver,
-            message: message,
-            contentType: contentType,
-            messageType: messageType || MessageTypes.INCOMING,
-            operator: isOperator,
-            datetime: CoreUtils.formatDate(new Date(datetime)),
-            isRead: false
-        };
-    },
     scrollIntoViewNeeded: function(parent, node, centerIfNeeded){
         var changed = false;
         centerIfNeeded = arguments.length === 0 ? true : !!centerIfNeeded;
@@ -221,6 +210,17 @@ var CoreUtils = {
         var w = open();
         w.document.title = title;
         w.document.body.appendChild(a);
+    },
+    asyncLoop: function(o){
+        var i=-1,
+            length = o.length;
+
+        var loop = function(){
+            i++;
+            if(i==length){o.callback(); return;}
+            o.run(loop, i);
+        };
+        loop();
     }
 };
 
@@ -230,19 +230,22 @@ var CoreUtils = {
 /***********************************/
 
 var ChatActions = {
-    outgoingMessage: function (id, message, sender, receiver, contentType, messageType, fullImage) {
+    outgoingMessage: function (data) {
+        var id = data.id || 'm_' + (++_lastMessageId);
         ChatDispatcher.dispatch({
             type: ActionTypes.NEW_OUT_MESSAGE,
-            id: id || 'm_' + (++_lastMessageId),
-            message: message,
-            sender: sender,
-            receiver: receiver,
-            contentType: contentType,
-            messageType: messageType,
-            fullImage: fullImage,
-            isOperator: true
+            payload:{
+                id: id,
+                message: data.message,
+                sender: data.sender.name,
+                receiver: data.receiver.name,
+                contentType: data.contentType,
+                messageType: data.messageType,
+                date: data.date,
+                fullImage: data.fullImage,
+                operator: true
+            }
         });
-        //Отправка на сервер
     },
 
     authSuccess: function (operator) {
@@ -264,33 +267,35 @@ var ChatActions = {
             CoreUtils.getThumbnailBase64(msg.message, function (b64string, fullB64Image) {
                 ChatDispatcher.dispatch({
                     type: ActionTypes.NEW_IN_MESSAGE,
-                    id: msg.id,
-                    message: b64string,
-                    sender: msg.sender,
-                    receiver: msg.receiver,
-                    contentType: msg.contentType,
-                    messageType: msg.messageType || MessageTypes.INCOMING,
-                    datetime: msg.date,
-                    fullImage: fullB64Image,
-                    isOperator: msg.operator
+                    payload: {
+                        id: msg.id,
+                        message: b64string,
+                        sender: msg.sender,
+                        receiver: msg.receiver,
+                        contentType: msg.contentType,
+                        messageType: msg.messageType || MessageTypes.INCOMING,
+                        date: msg.date,
+                        fullImage: fullB64Image,
+                        operator: msg.operator
+                    }
                 });
             });
         }else {
             ChatDispatcher.dispatch({
                 type: ActionTypes.NEW_IN_MESSAGE,
-                id: msg.id,
-                message: msg.message,
-                sender: msg.sender,
-                receiver: msg.receiver,
-                contentType: msg.contentType,
-                messageType: msg.messageType || MessageTypes.INCOMING,
-                datetime: msg.date,
-                fullImage: null,
-                isOperator: msg.operator
+                payload: {
+                    id: msg.id,
+                    message: msg.message,
+                    sender: msg.sender,
+                    receiver: msg.receiver,
+                    contentType: msg.contentType,
+                    messageType: msg.messageType || MessageTypes.INCOMING,
+                    date: msg.date,
+                    fullImage: null,
+                    operator: msg.operator
+                }
             });
         }
-        //var msg = CoreUtils.createInMessageFromRaw(
-        //    message, sender, receiver, messageType);
     },
 
     readMessages: function (contactId) {
@@ -424,8 +429,10 @@ var ParticipantsStore = objectAssign({}, EventEmitter.prototype, {
         return Object.keys(_chatParticipants[contactId] || {});
     },
 
-    addParticipantFor: function(contactId, participantId){
+    addParticipant: function(msg){
         var added = false;
+        var contactId = msg.receiver;
+        var participantId = msg.sender;
 
         if(!_chatParticipants[contactId]){
             _chatParticipants[contactId] = {};
@@ -512,30 +519,39 @@ var UnreadMessageStore = objectAssign({}, EventEmitter.prototype, {
 
 var MessageStore = objectAssign({}, EventEmitter.prototype, {
     addContactRawMessages: function(operator, rawMessages){
-        var activeContactId = ContactsStore.getActive();
-        for(var i=0, len=rawMessages.length; i<len; i++){
-            var rawMessage = rawMessages[i];
-            var isRead = true;
+        var historyMessages = {};
+        var contactId = null;
+        CoreUtils.asyncLoop({
+            length: rawMessages.length,
+            run: function(loop, i){
+                var rawMessage = rawMessages[i];
+                var isRead = true;
 
-            var message = CoreUtils.mapMessageFromRaw(
-                rawMessage,
-                isRead,
-                operator
-            );
+                var message = CoreUtils.mapMessageFromRaw(
+                    rawMessage,
+                    isRead,
+                    operator
+                );
 
-            if(message.contentType == MessageContentTypes.IMAGE){
-                (function(message){
-                    CoreUtils.getThumbnailBase64(message.message, function(thumb, full){
+                if(!contactId){contactId = message.to;}
+
+                if(message.contentType == MessageContentTypes.IMAGE) {
+                    CoreUtils.getThumbnailBase64(message.message, function (thumb, full) {
                         message.message = thumb;
-                        MessageStore.addMessage(message.to, message, activeContactId, true, true);
                         ChatActions.putFullImage(message.id, full);
+                        historyMessages[message.id] = message;
+                        loop();
                     });
-                })(message);
-
-            }else{
-                this.addMessage(message.to, message, activeContactId, true, true);
+                }else{
+                    historyMessages[message.id] = message;
+                    loop();
+                }
+            },
+            callback: function(){
+                MessageStore.addHistoryMessages(contactId, historyMessages);
+                MessageStore.emitUpdate();
             }
-        }
+        });
     },
     getAll: function(){
         return _messages;
@@ -563,35 +579,39 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
 
         return result;
     },
-    _addMessageToTop: function(contactId, message){
-        var msg = {};
-        msg[message.id]=message;
-        return React.addons.update(msg, {$merge: _messages[contactId].messages})
-    },
-    addMessage: function(senderId, message, activeId, forceRead, addToTop){
-        if(!forceRead) {
-            message.isRead = (activeId == senderId);
+
+    addHistoryMessages: function(contactId, messagesHash){
+        if(!_messages[contactId]){
+            _messages[contactId] = {
+                messages: messagesHash,
+                unreadIds: [],
+                firstUnreadMsgId: null
+            }
         }else{
-            message.isRead = forceRead;
+            _messages[contactId].messages = React.addons.update(
+                messagesHash,
+                {$merge: _messages[contactId].messages}
+            );
         }
-        if(!_messages[senderId]){
-            _messages[senderId] = {
+    },
+
+    addMessage: function(contactId, message, activeId){
+        message.isRead = (activeId == contactId);
+        if(!_messages[contactId]){
+            _messages[contactId] = {
                 messages:{},
                 unreadIds: [],
                 firstUnreadMsgId: null
             }
         }
         if(!message.isRead){
-            _messages[senderId].unreadIds.push(message.id);
-            if(_messages[senderId].firstUnreadMsgId == null){
-                _messages[senderId].firstUnreadMsgId = message.id;
+            _messages[contactId].unreadIds.push(message.id);
+            if(_messages[contactId].firstUnreadMsgId == null){
+                _messages[contactId].firstUnreadMsgId = message.id;
             }
         }
-        if(addToTop){
-            _messages[senderId].messages = this._addMessageToTop(senderId, message);
-        }else {
-            _messages[senderId].messages[message.id] = message;
-        }
+
+        _messages[contactId].messages[message.id] = message;
     },
 
     emitChange: function() {
@@ -640,7 +660,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             contentType: data.type,
             messageType: MessageTypes.OUTGOING,
             operator: true,
-            datetime: CoreUtils.formatDate(new Date()),
+            date: data.date,
             isRead: true
         };
         _messages[data.contact.name].messages[message.id] = message;
@@ -777,8 +797,11 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         _contacts[_activeContactId].clicks = (clicks && ++clicks) || 1;
         return changed;
     },
-    setLoadingState: function(contactId, status){
-        _contacts[_activeContactId].loadStatus = status;
+    setLoadingState: function(contactId){
+        _contacts[contactId].loadStatus = 'loading';
+    },
+    setLoadedState: function(contactId){
+        _contacts[contactId].loadStatus = 'loaded';
     }
 });
 
@@ -816,7 +839,8 @@ ParticipantsStore.dispatchToken = ChatDispatcher.register(function(action) {
     switch (action.type) {
         case ActionTypes.NEW_IN_MESSAGE:
         case ActionTypes.NEW_OUT_MESSAGE:
-            added = ParticipantsStore.addParticipantFor(action.receiver, action.sender);
+            var msg = action.payload;
+            added = ParticipantsStore.addParticipant(msg);
             if(added) {
                 ParticipantsStore.emitChange();
             }
@@ -869,7 +893,6 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
     var message = null;
     var activeContactId;
     var unreadIndex = -1;
-    var rawMessage = {};
 
     switch(action.type) {
         case ActionTypes.CLICK_CONTACT:
@@ -885,43 +908,27 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             }
             break;
         case ActionTypes.NEW_OUT_MESSAGE:
-            rawMessage = {
-                id: action.id,
-                message: action.message,
-                sender: action.sender.name,
-                receiver: action.receiver.name,
-                contentType: action.contentType,
-                messageType: action.messageType,
-                operator: action.isOperator
-            };
-
-            message = CoreUtils.mapMessageFromRaw(rawMessage, true);
-
+            var outMsg = action.payload;
+            message = CoreUtils.mapMessageFromRaw(outMsg, true);
+            var contactId = message.to;
             activeContactId = ContactsStore.getActive();
-            MessageStore.addMessage(message.to, message, activeContactId);
-            FullImageStore.putFullImage(message.id, action.fullImage);
 
-            if(action.receiver.name == activeContactId) {
+            MessageStore.addMessage(contactId, message, activeContactId);
+            FullImageStore.putFullImage(message.id, outMsg.fullImage);
+
+            if(outMsg.receiver == activeContactId) {
                 MessageStore.emitUpdate();
             }
             MessageStore.emitChange();
             break;
         case ActionTypes.NEW_IN_MESSAGE:
-            rawMessage = {
-                id: action.id,
-                message: action.message,
-                sender: action.sender,
-                receiver: action.receiver,
-                contentType: action.contentType,
-                messageType: action.messageType,
-                operator: action.isOperator
-            };
-            message = CoreUtils.mapMessageFromRaw(rawMessage);
+            var inMsg = action.payload;
+            message = CoreUtils.mapMessageFromRaw(inMsg);
             activeContactId = ContactsStore.getActive();
             MessageStore.addMessage(message.to, message, activeContactId);
-            FullImageStore.putFullImage(message.id, action.fullImage);
+            FullImageStore.putFullImage(message.id, inMsg.fullImage);
 
-            if(action.sender == activeContactId) {
+            if(inMsg.sender == activeContactId) {
                 MessageStore.emitUpdate();
             }
             MessageStore.emitChange();
@@ -1124,17 +1131,12 @@ var UnreadOutgoingMessage = React.createClass({
         }
     },
     render: function() {
-        var getCurrentTime = function (dt) {
-            var resultDate = new Date(dt) || new Date();
-            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
-        };
-
         return (
             <li className="message-container clearfix messages-unread">
                 <span className="mark">New messages</span>
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                        {CoreUtils.getCurrentTime(this.props.data.date)}, {'Today'}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.from || 'Empty sender'}
@@ -1199,11 +1201,6 @@ var UnreadIncomingMessage = React.createClass({
         }
     },
     render: function() {
-        var getCurrentTime = function (dt) {
-            var resultDate = new Date(dt) || new Date();
-            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
-        };
-
         return (
             <li className="message-container messages-unread">
                 <span className="mark">New messages</span>
@@ -1214,7 +1211,7 @@ var UnreadIncomingMessage = React.createClass({
                         {this._operatorStatus()}
                     </span>
                     <span className="message-data-time">
-                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                        { CoreUtils.getCurrentTime(this.props.data.date) }, {'Today'}
                     </span>
                 </div>
                 <div className={"message my-message" + this._operatorMsgClasses() }>
@@ -1252,17 +1249,12 @@ var UnreadEndConversationMessage = React.createClass({
         }
     },
     render: function() {
-        var getCurrentTime = function (dt) {
-            var resultDate = new Date(dt) || new Date();
-            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
-        };
-
         return (
             <li className="message-container clearfix messages-unread">
                 <span className="mark">New messages</span>
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                        { CoreUtils.getCurrentTime(this.props.data.date) }, {'Today'}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.from || 'Empty sender'}
@@ -1333,16 +1325,11 @@ var OutgoingMessage = React.createClass({
         }
     },
     render: function() {
-        var getCurrentTime = function (dt) {
-            var resultDate = new Date(dt) || new Date();
-            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
-        };
-
         return (
             <li className="clearfix">
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                        {CoreUtils.getCurrentTime(this.props.data.date)}, {'Today'}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.from || 'Empty sender'}
@@ -1537,11 +1524,6 @@ var IncomingMessage = React.createClass({
         }
     },
     render: function() {
-        var getCurrentTime = function (dt) {
-            var resultDate = new Date(dt) || new Date();
-            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
-        };
-
         return (
             <li>
                 <div className="message-data">
@@ -1551,7 +1533,7 @@ var IncomingMessage = React.createClass({
                         {this.operatorStatus()}
                     </span>
                     <span className="message-data-time">
-                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                        { CoreUtils.getCurrentTime(this.props.data.date)}, {'Today'}
                     </span>
                 </div>
                 <div className={"message my-message" + this._operatorMsgClasses()}>
@@ -1724,14 +1706,18 @@ var FooterBox = React.createClass({
     },
     sendMessage: function(e){
         if(this.state.value.trim() !== '') {
-            ChatActions.outgoingMessage(
-                null,
-                this.state.value,
-                this.props.operator,
-                this.props.contact,
-                MessageContentTypes.TEXT,
-                MessageTypes.OUTGOING
-            );
+            var dt = new Date();
+            var msg = {
+                id: null,
+                message: this.state.value,
+                sender: this.props.operator,
+                receiver: this.props.contact,
+                contentType: MessageContentTypes.TEXT,
+                messageType: MessageTypes.OUTGOING,
+                date: dt,
+                fullImage: null
+            };
+            ChatActions.outgoingMessage(msg);
             this.setState({value: ''});
         }
     },
@@ -1754,15 +1740,18 @@ var FooterBox = React.createClass({
         }
     },
     _onImageUpload: function(b64string, fullBase64string){
-        ChatActions.outgoingMessage(
-            null,
-            b64string,
-            this.props.operator,
-            this.props.contact,
-            MessageContentTypes.IMAGE,
-            MessageTypes.OUTGOING,
-            fullBase64string
-        );
+        var dt = new Date();
+        var msg = {
+            id: null,
+            message: b64string,
+            sender: this.props.operator,
+            receiver: this.props.contact,
+            contentType: MessageContentTypes.IMAGE,
+            messageType: MessageTypes.OUTGOING,
+            date: dt,
+            fullImage: fullBase64string
+        };
+        ChatActions.outgoingMessage(msg);
     },
     render: function() {
         return (
@@ -1800,16 +1789,11 @@ var EndConversationMessage = React.createClass({
         );
     },
     render: function() {
-        var getCurrentTime = function (dt) {
-            var resultDate = new Date(dt) || new Date();
-            return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
-        };
-
         return (
             <li className="clearfix">
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {getCurrentTime(this.props.data.datetime) || getCurrentTime()}, {'Today'}
+                        { CoreUtils.getCurrentTime(this.props.data.date)}, {'Today'}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.from || 'Empty sender'}
