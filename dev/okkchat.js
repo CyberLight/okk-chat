@@ -1398,6 +1398,27 @@ var MinChatBox = React.createClass({displayName: "MinChatBox",
 });
 
 
+var EmptyMinChatBox = React.createClass({displayName: "EmptyMinChatBox",
+    _maximizeClicked: function(){
+        if(typeof this.props.onMaximize == 'function'){
+            this.props.onMaximize();
+        }
+    },
+    render: function(){
+        return (
+            React.createElement("div", {className: "chat-container min-container clearfix"}, 
+                React.createElement("div", {className: "msg-count center-text bg-"+this.props.status}
+                ), 
+                React.createElement("div", {className: "chat-info"}, 
+                    React.createElement(IconButton, {onClick: this._maximizeClicked, 
+                                classes: "fa fa-2x fa-plus-square maximize-icon"})
+                )
+            )
+        )
+    }
+});
+
+
 var LoginBox = React.createClass({displayName: "LoginBox",
     componentDidMount: function() {
         AuthStore.addChangeListener(this._onAuthChanged);
@@ -1422,19 +1443,33 @@ var LoginBox = React.createClass({displayName: "LoginBox",
             this.tryAgainState();
         }
     },
+    _onMinimize: function(){
+        this.setState({
+            loginState: 'min',
+            originalState: this.state.loginState
+        });
+    },
+    _onMaximize: function(){
+        this.setState({
+            loginState: this.state.originalState
+        });
+    },
     progressState: function(){
         this.setState({
-            loginState: 'progress'
+            loginState: 'progress',
+            originalState: 'progress'
         });
     },
     successState: function(){
         this.setState({
-            loginState: 'success'
+            loginState: 'success',
+            originalState: 'success'
         });
     },
     tryAgainState: function(){
         this.setState({
-            loginState: 'login'
+            loginState: 'login',
+            originalState: 'login'
         });
     },
     loginClick: function(e){
@@ -1443,30 +1478,43 @@ var LoginBox = React.createClass({displayName: "LoginBox",
     },
     renderState: function(){
         switch(this.state.loginState){
+            case 'min':
+                return (
+                    React.createElement(EmptyMinChatBox, {onMaximize: this._onMaximize})
+                );
             case 'login':
                 return (
-                    React.createElement("div", {className: "wrapper"}, 
-                        React.createElement("button", {className: "login-btn", onClick: this.loginClick}, 
-                            React.createElement("i", {className: "chat-spinner"}), 
-                            React.createElement("span", {className: "state"}, "Log in")
+                    React.createElement("div", {className: "chat"}, 
+                        React.createElement(EmptyHeaderBox, {onMinimize: this._onMinimize}), 
+                        React.createElement("div", {className: "wrapper"}, 
+                            React.createElement("button", {className: "login-btn", onClick: this.loginClick}, 
+                                React.createElement("i", {className: "chat-spinner"}), 
+                                React.createElement("span", {className: "state"}, "Log in")
+                            )
                         )
                     )
                 );
             case 'progress':
                 return (
-                    React.createElement("div", {className: "wrapper loading"}, 
-                        React.createElement("button", {className: "login-btn"}, 
-                            React.createElement("i", {className: "chat-spinner"}), 
-                            React.createElement("span", {className: "state"}, "Authenticating")
+                    React.createElement("div", {className: "chat"}, 
+                        React.createElement(EmptyHeaderBox, {onMinimize: this._onMinimize}), 
+                        React.createElement("div", {className: "wrapper loading"}, 
+                            React.createElement("button", {className: "login-btn"}, 
+                                React.createElement("i", {className: "chat-spinner"}), 
+                                React.createElement("span", {className: "state"}, "Authenticating")
+                            )
                         )
                     )
                 );
             case 'success':
                 return (
-                    React.createElement("div", {className: "wrapper ok loading"}, 
-                        React.createElement("button", {className: "login-btn"}, 
-                            React.createElement("i", {className: "chat-spinner"}), 
-                            React.createElement("span", {className: "state"}, "Welcome back!")
+                    React.createElement("div", {className: "chat"}, 
+                        React.createElement(EmptyHeaderBox, {onMinimize: this._onMinimize}), 
+                        React.createElement("div", {className: "wrapper ok loading"}, 
+                            React.createElement("button", {className: "login-btn"}, 
+                                React.createElement("i", {className: "chat-spinner"}), 
+                                React.createElement("span", {className: "state"}, "Welcome back!")
+                            )
                         )
                     )
                 );
@@ -1474,11 +1522,7 @@ var LoginBox = React.createClass({displayName: "LoginBox",
         }
     },
     render: function() {
-        return (
-            React.createElement("div", {className: "chat"}, 
-                this.renderState()
-            )
-        )
+        return this.renderState();
     }
 });
 
