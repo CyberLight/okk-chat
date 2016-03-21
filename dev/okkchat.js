@@ -1407,7 +1407,8 @@ var EmptyMinChatBox = React.createClass({displayName: "EmptyMinChatBox",
     render: function(){
         return (
             React.createElement("div", {className: "chat-container min-container clearfix"}, 
-                React.createElement("div", {className: "msg-count center-text bg-"+this.props.status}
+                React.createElement("div", {className: "msg-count-empty center-text"}, 
+                    'Chat'
                 ), 
                 React.createElement("div", {className: "chat-info"}, 
                     React.createElement(IconButton, {onClick: this._maximizeClicked, 
