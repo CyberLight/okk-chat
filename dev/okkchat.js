@@ -120,7 +120,7 @@ var CoreUtils = {
         }
 
         var result = {
-            id: raw.id,
+            id: 'm_' + raw.id,
             from: raw.sender,
             to: raw.receiver,
             message: raw.message,
@@ -231,7 +231,7 @@ var CoreUtils = {
 
 var ChatActions = {
     outgoingMessage: function (data) {
-        var id = data.id || 'm_' + (++_lastMessageId);
+        var id = data.id || (++_lastMessageId);
         ChatDispatcher.dispatch({
             type: ActionTypes.NEW_OUT_MESSAGE,
             payload:{
