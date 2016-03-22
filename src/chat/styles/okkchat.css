@@ -1,13 +1,10 @@
 @import url(https://fonts.googleapis.com/css?family=Lato:400,700);
-*, *:before, *:after {
+#chatbox *, #chatbox *:before, #chatbox *:after {
     box-sizing: border-box;
 }
 
-body {
-    background: #C5DDEB;
+#chatbox {
     font: 14px/20px "Lato", Arial, sans-serif;
-    padding: 40px 0;
-    color: white;
 }
 
 .chat-container {
@@ -16,7 +13,7 @@ body {
     background: #444753;
     border-radius: 5px;
     position: fixed;
-    right: 3px;
+    left: 3px;
     bottom: 3px;
 
     box-shadow: -1px 0px 2px 2px rgba(0,0,0,0.27);
