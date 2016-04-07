@@ -1,121 +1,76 @@
 function OkkChatReady(OkkChatApi) {
 
 /***********************************************/
-/* Helper classes */
-/***********************************************/
-
-var _id = 0;
-
-function getRandomItem(arr) {
-    var keys = Object.keys(arr);
-    var count = keys.length;
-    return arr[keys[Math.floor(Math.random() * count)]];
-}
-
-
-function genNumber() {
-    if (!genNumber.prevValues) {
-        genNumber.prevValues = 0;
-    }
-    genNumber.prevValues++;
-    return genNumber.prevValues + 100000;
-}
-
-var FakeContactsGenerator = objectAssign({}, {
-    generate: function (count) {
-        var contacts = [];
-        var genCount = count || 10;
-        var statuses = ['online', 'offline'];
-
-        for (var i = 0; i < genCount; i++) {
-            var item = {
-                id: i,
-                name: '+996555' + genNumber(),
-                status: getRandomItem(statuses)
-            };
-            contacts.push(item);
-        }
-        return contacts;
-    }
-});
-
-var FakeMessagesGenerator = objectAssign({}, {
-    _messageResponses: [
-        'Why did the web developer leave the restaurant? Because of the table layout.',
-        'How do you comfort a JavaScript bug? You console it.',
-        'An SQL query enters a bar, approaches two tables and asks: "May I join you?"',
-        'What is the most used language in programming? Profanity.',
-        'What is the object-oriented way to become wealthy? Inheritance.',
-        'An SEO expert walks into a bar, bars, pub, tavern, public house, Irish pub, drinks, beer, alcohol'
-    ],
-    _contentType: ['text', 'text', 'image'],
-    _isOperator: [0, 0, 0, 0, 0, 1],
-    _endIncomingMessages: [1],
-    _operatorNames: ['Лена', 'Валентина', 'Алина', 'Настя'],
-    generate: function (contactId, count) {
-        var rawMessages = [];
-        for (var i = 0; i < count; i++) {
-            rawMessages.push(this.generateOne(contactId));
-        }
-        return rawMessages;
-    },
-    generateOne: function (contactId) {
-        var contact = {name: contactId};
-        var date = OkkChatApi.CoreUtils.formatDate(new Date());
-
-        var currentContentType = getRandomItem(this._contentType);
-        var sender = '';
-        var receiver = '';
-        var messageType = OkkChatApi.MessageTypes.INCOMING;
-        var isOperatorFlag = getRandomItem(this._isOperator);
-        if (isOperatorFlag) {
-            sender = getRandomItem(this._operatorNames);
-            receiver = contact.name;
-            isOperatorFlag = true;
-            var endConversationFlag = getRandomItem(this._endIncomingMessages);
-            if (endConversationFlag && currentContentType != OkkChatApi.MessageContentTypes.IMAGE) {
-                messageType = OkkChatApi.MessageTypes.END_OF_CONVERSATION;
-            } else {
-                messageType = OkkChatApi.MessageTypes.INCOMING;
-            }
-        } else {
-            sender = contact.name;
-            receiver = '';
-            isOperatorFlag = false;
-        }
-        var id = ++_id;
-        if (currentContentType == OkkChatApi.MessageContentTypes.TEXT) {
-            return {
-                id: id,
-                message: getRandomItem(this._messageResponses),
-                sender: sender,
-                receiver: receiver,
-                contentType: OkkChatApi.MessageContentTypes.TEXT,
-                messageType: messageType,
-                operator: isOperatorFlag,
-                date: date
-            };
-        } else if (currentContentType == OkkChatApi.MessageContentTypes.IMAGE) {
-            return {
-                id: id,
-                message: getRandomItem(ImageMessages),
-                sender: sender,
-                receiver: receiver,
-                contentType: OkkChatApi.MessageContentTypes.IMAGE,
-                messageType: messageType,
-                operator: isOperatorFlag,
-                date: date
-            };
-        }
-    }
-});
-
-/***********************************************/
 /* Example of Server API class with dispatcher */
 /***********************************************/
 
     var ServerAPI = objectAssign({}, {
         _loadQueue: {},
+        _accessKey: null,
+        _socket: null,
+        _updateQueue: [],
+        _connectToSocket: function(){
+            var self = this,
+                opts = {
+                    path: ChatConfig.SOCKET_IO_NS
+                };
+
+            if(this._accessKey){
+                opts['extraHeaders'] = {'Authorization': this._accessKey};
+            }
+
+            var socket = io(ChatConfig.SOCKET_IO_URL, opts);
+
+            socket.on('connect', function(){
+                console.log('connected!!!');
+                self._socket = socket;
+            });
+
+            socket.on('disconnect', function(){
+                console.log('disconnect!!!');
+            });
+
+            socket.on('incoming:message', function (response) {
+                var message = JSON.parse(response);
+                OkkChatApi.Actions.incomingMessage(message)
+            });
+
+            socket.on('operator:message', function (response) {
+                var res = JSON.parse(response);
+                console.log("operator:message response", res.id, res.success);
+                var item = this._updateQueue.shift();
+                OkkChatApi.Actions.updateMessageContent(item.to, item.tempMessageId, res);
+            }.bind(this));
+
+            socket.on('operator:message:history', function(data) {
+                var response = JSON.parse(data);
+                if(response.success) {
+                    var operator = OkkChatApi.Stores.AuthStore.getOperator();
+                    OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, response.contact, response.data);
+                    OkkChatApi.Stores.MessageStore.emitUpdate();
+                    OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
+                    OkkChatApi.Stores.ContactsStore.emitContactSelect();
+                    ServerAPI.popQueue(response.contact);
+                }
+            });
+
+            socket.on('client:status', function (data) {
+                var client = JSON.parse(data);
+                OkkChatApi.Actions.clientStatusChanged(client.id, client.username, client.status);
+            });
+
+            socket.on('client:new', function (response) {
+
+            });
+
+            socket.on('client:list', function (jsonResponse) {
+                var response = JSON.parse(jsonResponse);
+                if(response.success) {
+                    OkkChatApi.Stores.ContactsStore.init(response.data);
+                    OkkChatApi.Stores.ContactsStore.emitChange();
+                }
+            });
+        },
         pushQueue: function(contactId){
             if(!this._loadQueue[contactId]){
                 this._loadQueue[contactId] = true;
@@ -126,37 +81,51 @@ var FakeMessagesGenerator = objectAssign({}, {
         popQueue: function(contactId){
             delete this._loadQueue[contactId];
         },
-        authenticate: function (credentials) {
-            setTimeout(function () {
-                var testOperator = {name: 'Ксения', status: 'online'};
-                OkkChatApi.Actions.authSuccess(testOperator);
-            }, 1500);
+        authenticate: function () {
+            fetch(ChatConfig.URL_TO_OPERATOR_AUTH, { credentials: 'include' })
+            .then(function(response){
+                return response.json();
+            })
+            .then(function(data){
+                if(data.success) {
+                    ServerAPI._accessKey = data.access_key;
+                    setTimeout(function() {
+                        var user = data.user;
+                        var operator = {
+                            id: user.id,
+                            name: user.first_name,
+                            nick: user.username,
+                            status: user.status
+                        };
+                        OkkChatApi.Actions.authSuccess(operator);
+                        ServerAPI._connectToSocket();
+                    }, 1000);
+                }else{
+                    setTimeout(function(){
+                        OkkChatApi.Actions.authFail(data.message);
+                    }, 1000);
+                }
+            })
+            .catch(function(data){
+                    setTimeout(function(){
+                        OkkChatApi.Actions.authFail(data.message);
+                    }, 1000);
+            });
         },
         loadContacts: function () {
-            var rawContacts = FakeContactsGenerator.generate(20);
-            OkkChatApi.Stores.ContactsStore.init(rawContacts);
-            OkkChatApi.Stores.ContactsStore.emitChange();
+            this._socket.emit('client:list');
         },
-        loadRawContactMessages: function (contactId) {
-            setTimeout(function () {
-                var count = 30;
-                var rawMessages = FakeMessagesGenerator.generate(contactId, count);
-                var operator = OkkChatApi.Stores.AuthStore.getOperator();
-                OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, rawMessages);
-                OkkChatApi.Stores.MessageStore.emitUpdate();
-                OkkChatApi.Stores.ContactsStore.setLoadedState(contactId);
-                ServerAPI.popQueue(contactId);
-            }.bind(this), 3000);
-        },
-        runFakeMessageLoop: function(){
-            var contacts = OkkChatApi.Stores.ContactsStore.getAll();
-            setInterval(function () {
-                var message = FakeMessagesGenerator.generateOne(getRandomItem(contacts).name);
-                OkkChatApi.Actions.incomingMessage(message);
-            }.bind(this), 5000);
+        loadRawContactMessages: function (contactId, firstMsgId) {
+            var queryData = {mobile: contactId};
+            if (firstMsgId){
+                queryData['firstMessageId'] = firstMsgId;
+            }
+
+            this._socket.emit('operator:message:history', JSON.stringify(queryData));
         },
         sendMessageToServer: function(msg){
-
+            this._updateQueue.push({to: msg.receiver, tempMessageId: msg.id });
+            this._socket.emit('operator:message', JSON.stringify(msg))
         }
     });
 
@@ -164,11 +133,20 @@ var FakeMessagesGenerator = objectAssign({}, {
         switch (action.type) {
             case OkkChatApi.ActionTypes.NEW_OUT_MESSAGE:
                 var msg = action.payload;
-                ServerAPI.sendMessageToServer(msg);
+                var rawMessage = {
+                    id: msg.id,
+                    message: msg.contentType == OkkChatApi.MessageContentTypes.IMAGE ? msg.fullImage : msg.message,
+                    sender: msg.sender,
+                    receiver: msg.receiver,
+                    contentType: msg.contentType,
+                    messageType: msg.messageType,
+                    date: OkkChatApi.CoreUtils.formatDate(msg.date),
+                    operator: true
+                };
+                ServerAPI.sendMessageToServer(rawMessage);
                 break;
             case OkkChatApi.ActionTypes.API_FETCH_CONTACTS:
                 ServerAPI.loadContacts();
-                ServerAPI.runFakeMessageLoop();
                 break;
             case OkkChatApi.ActionTypes.API_AUTH_OPERATOR:
                 ServerAPI.authenticate(action.credentials);
@@ -177,7 +155,7 @@ var FakeMessagesGenerator = objectAssign({}, {
                 var contactId = action.contact.name;
                 var added = ServerAPI.pushQueue(contactId);
                 if(added) {
-                    ServerAPI.loadRawContactMessages(contactId);
+                    ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
                 }
                 break;
             default:

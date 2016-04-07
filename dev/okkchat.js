@@ -146,6 +146,7 @@ var CoreUtils = {
             operator: raw.operator,
             date: raw.date,
             fullImageUrl: raw.fullImageUrl,
+            sending: raw.sending || false,
             isRead: !!isRead
         };
 
@@ -295,6 +296,7 @@ var ChatActions = {
                 messageType: data.messageType,
                 date: data.date,
                 fullImage: data.fullImage,
+                sending: data.sending,
                 operator: true
             }
         });
@@ -965,6 +967,7 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             var data = payload.data;
             var msg = _messages[payload.receiver].messages[payload.tempMessageId];
             msg.id = data.id;
+            msg.sending = false;
             if (data.contentType == MessageContentTypes.IMAGE) {
                 msg.fullImageUrl = data.fullImageUrl;
             }
@@ -1328,7 +1331,6 @@ var TypingMessage = React.createClass({displayName: "TypingMessage",
 
 var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
     _onDownloadMessages: function(e){
-        //TODO: Insert usage of fullImageUrl
         CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
         e.stopPropagation();
@@ -1340,6 +1342,15 @@ var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
             );
         } else {
             return '';
+        }
+    },
+    renderSendIndicator: function(data){
+        if (data.sending) {
+            return (
+                React.createElement("span", {className: "fa fa-refresh fa-spin fa-fw send-icon"})
+            )
+        }else{
+            return "";
         }
     },
     renderMessage: function(data){
@@ -1370,7 +1381,8 @@ var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
                     React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'me')})
                 ), 
                 React.createElement("div", {className: "message other-message float-right"}, 
-                     this.renderMessage(this.props.data) 
+                     this.renderMessage(this.props.data), 
+                     this.renderSendIndicator(this.props.data) 
                 )
             )
         );
@@ -1565,7 +1577,6 @@ var LoginBox = React.createClass({displayName: "LoginBox",
 
 var IncomingMessage = React.createClass({displayName: "IncomingMessage",
     _onDownloadMessages: function(e){
-        //TODO: Insert fullImageUrl
         CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
         e.stopPropagation();
@@ -1792,6 +1803,7 @@ var FooterBox = React.createClass({displayName: "FooterBox",
                 contentType: MessageContentTypes.TEXT,
                 messageType: MessageTypes.OUTGOING,
                 date: dt,
+                sending: true,
                 fullImage: null
             };
             ChatActions.outgoingMessage(msg);
@@ -1809,6 +1821,7 @@ var FooterBox = React.createClass({displayName: "FooterBox",
             contentType: MessageContentTypes.TEXT,
             messageType: MessageTypes.END_OF_CONVERSATION,
             date: dt,
+            sending: true,
             fullImage: null
         };
         ChatActions.outgoingMessage(msg);
@@ -1832,6 +1845,7 @@ var FooterBox = React.createClass({displayName: "FooterBox",
             contentType: MessageContentTypes.IMAGE,
             messageType: MessageTypes.OUTGOING,
             date: dt,
+            sending: true,
             fullImage: fullBase64string
         };
         ChatActions.outgoingMessage(msg);
