@@ -45,7 +45,8 @@ var ActionTypes = {
     API_FETCH_CONTACTS: 'API_FETCH_CONTACTS',
     API_AUTH_OPERATOR: 'API_AUTH_OPERATOR',
     API_FETCH_CONTACT_MESSAGES: 'API_FETCH_CONTACT_MESSAGES',
-    API_FETCH_CONTACT_HISTORY: 'API_FETCH_CONTACT_HISTORY'
+    API_FETCH_CONTACT_HISTORY: 'API_FETCH_CONTACT_HISTORY',
+    UPDATE_MESSAGE_CONTENT: 'UPDATE_MESSAGE_CONTENT'
 };
 
 var AuthStatuses = {
@@ -116,16 +117,20 @@ var CoreUtils = {
         if (!raw.receiver) {
             raw.receiver = raw.sender;
         }
+        var strId = (""+raw.id);
+        var id = strId.indexOf('m_') == 0 || strId.indexOf('temp_') == 0 ? raw.id : 'm_' + raw.id;
 
         var result = {
-            id: 'm_' + raw.id,
+            id: id,
             from: raw.sender,
+            fromName: raw.operator ? raw.operatorName : raw.sender,
             to: raw.receiver,
             message: raw.message,
             contentType: raw.contentType,
             messageType: raw.messageType,
             operator: raw.operator,
             date: raw.date,
+            fullImageUrl: raw.fullImageUrl,
             isRead: !!isRead
         };
 
@@ -209,6 +214,19 @@ var CoreUtils = {
         w.document.title = title;
         w.document.body.appendChild(a);
     },
+    downloadImageByUrl: function(url, title, nameOfFile){
+        var img = document.createElement('img');
+        img.src = url;
+
+        var a = document.createElement('a');
+        a.setAttribute("download", nameOfFile);
+        a.setAttribute("href", url);
+        a.appendChild(img);
+
+        var w = open();
+        w.document.title = title;
+        w.document.body.appendChild(a);
+    },
     asyncLoop: function(o){
         var i=-1,
             length = o.length;
@@ -228,15 +246,26 @@ var CoreUtils = {
 /***********************************/
 
 var ChatActions = {
+    updateMessageContent: function(receiver, tempMessageId, data){
+        ChatDispatcher.dispatch({
+            type: ActionTypes.UPDATE_MESSAGE_CONTENT,
+            payload: {
+                receiver: receiver,
+                tempMessageId: tempMessageId,
+                data: data
+            }
+        });
+    },
     outgoingMessage: function (data) {
-        var id = data.id || (++_lastMessageId);
+        var id = data.id || 'm_' + (++_lastMessageId);
         ChatDispatcher.dispatch({
             type: ActionTypes.NEW_OUT_MESSAGE,
             payload:{
                 id: id,
                 message: data.message,
-                sender: data.sender.name,
-                receiver: data.receiver.name,
+                sender: data.sender,
+                operatorName: data.operatorName,
+                receiver: data.receiver,
                 contentType: data.contentType,
                 messageType: data.messageType,
                 date: data.date,
@@ -262,21 +291,21 @@ var ChatActions = {
 
     incomingMessage: function (msg) {
         if(msg.contentType == MessageContentTypes.IMAGE){
-            CoreUtils.getThumbnailBase64(msg.message, function (b64string, fullB64Image) {
-                ChatDispatcher.dispatch({
-                    type: ActionTypes.NEW_IN_MESSAGE,
-                    payload: {
-                        id: msg.id,
-                        message: b64string,
-                        sender: msg.sender,
-                        receiver: msg.receiver,
-                        contentType: msg.contentType,
-                        messageType: msg.messageType || MessageTypes.INCOMING,
-                        date: msg.date,
-                        fullImage: fullB64Image,
-                        operator: msg.operator
-                    }
-                });
+            ChatDispatcher.dispatch({
+                type: ActionTypes.NEW_IN_MESSAGE,
+                payload: {
+                    id: msg.id,
+                    message: 'data:image/jpg;base64,' + msg.message,
+                    sender: msg.sender,
+                    receiver: msg.receiver,
+                    contentType: msg.contentType,
+                    messageType: msg.messageType || MessageTypes.INCOMING,
+                    date: msg.date,
+                    fullImage: null,
+                    fullImageUrl: msg.fullImageUrl,
+                    operator: msg.operator,
+                    operatorName: msg.operatorName
+                }
             });
         }else {
             ChatDispatcher.dispatch({
@@ -290,7 +319,9 @@ var ChatActions = {
                     messageType: msg.messageType || MessageTypes.INCOMING,
                     date: msg.date,
                     fullImage: null,
-                    operator: msg.operator
+                    fullImageUrl: null,
+                    operator: msg.operator,
+                    operatorName: msg.operatorName
                 }
             });
         }
@@ -445,37 +476,6 @@ var ParticipantsStore = objectAssign({}, EventEmitter.prototype, {
 
 });
 
-var FullImageStore = objectAssign({}, EventEmitter.prototype, {
-
-    emitChange: function() {
-        this.emit(ChatConstants.FULL_IMAGES_CHANGE_EVENT);
-    },
-
-    /**
-     * @param {function} callback
-     */
-    addChangeListener: function(callback) {
-        this.on(ChatConstants.FULL_IMAGES_CHANGE_EVENT, callback);
-    },
-
-    /**
-     * @param {function} callback
-     */
-    removeChangeListener: function(callback) {
-        this.removeListener(ChatConstants.FULL_IMAGES_CHANGE_EVENT, callback);
-    },
-
-    putFullImage: function(id, b64string){
-        if(b64string) {
-            _fullMessageImages[id] = b64string;
-        }
-    },
-
-    getFullImage: function(id) {
-        return _fullMessageImages[id];
-    }
-});
-
 var UnreadMessageStore = objectAssign({}, EventEmitter.prototype, {
 
     emitChange: function() {
@@ -516,40 +516,28 @@ var UnreadMessageStore = objectAssign({}, EventEmitter.prototype, {
 });
 
 var MessageStore = objectAssign({}, EventEmitter.prototype, {
-    addContactRawMessages: function(operator, rawMessages){
+    addContactRawMessages: function(operator, contactId, rawMessages){ //AAA
         var historyMessages = {};
-        var contactId = null;
-        CoreUtils.asyncLoop({
-            length: rawMessages.length,
-            run: function(loop, i){
-                var rawMessage = rawMessages[i];
-                var isRead = true;
 
-                var message = CoreUtils.mapMessageFromRaw(
-                    rawMessage,
-                    isRead,
-                    operator
-                );
+        for(var i in rawMessages) {
+            var rawMessage = rawMessages[i];
+            var isRead = true;
 
-                if(!contactId){contactId = message.to;}
-
-                if(message.contentType == MessageContentTypes.IMAGE) {
-                    CoreUtils.getThumbnailBase64(message.message, function (thumb, full) {
-                        message.message = thumb;
-                        ChatActions.putFullImage(message.id, full);
-                        historyMessages[message.id] = message;
-                        loop();
-                    });
-                }else{
-                    historyMessages[message.id] = message;
-                    loop();
-                }
-            },
-            callback: function(){
-                MessageStore.addHistoryMessages(contactId, historyMessages);
-                MessageStore.emitUpdate();
+            if(rawMessage.contentType == MessageContentTypes.IMAGE){
+                rawMessage.message = 'data:image/jpg;base64,' + rawMessage.message;
             }
-        });
+
+            var message = CoreUtils.mapMessageFromRaw(
+                rawMessage,
+                isRead,
+                operator.nick
+            );
+
+            historyMessages[message.id] = message;
+        }
+
+        MessageStore.addHistoryMessages(contactId, historyMessages);
+        MessageStore.emitUpdate();
     },
     getAll: function(){
         return _messages;
@@ -651,8 +639,9 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
     addOutMessage: function(data){
         _lastMessageId++;
         var message = {
-            id: 'm_' + _lastMessageId,
-            from: data.operator.name,
+            id: data.id, //CHANGED
+            from: data.operator.nick,
+            fromName: data.operator.name,
             to: data.contact.name,
             message: data.data.message,
             contentType: data.type,
@@ -700,9 +689,9 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     init: function(rawContacts){
         for(var i=0, len=rawContacts.length; i<len; i++){
             var rawContact = rawContacts[i];
-            _contacts[rawContact.name] = {
+            _contacts[rawContact.username] = {
                 id: rawContact.id,
-                name: rawContact.name,
+                name: rawContact.username,
                 status: rawContact.status,
                 loadStatus: 'init'
             };
@@ -816,16 +805,9 @@ AuthStore.dispatchToken = ChatDispatcher.register(function(action) {
             AuthStore.setOperator(action.operator);
             AuthStore.emitChange();
             break;
-        default:
-            break;
-    }
-});
-
-FullImageStore.dispatchToken = ChatDispatcher.register(function(action) {
-    switch (action.type) {
-        case ActionTypes.PUT_FULL_IMAGE:
-            FullImageStore.putFullImage(action.messageId, action.imageData);
-            FullImageStore.emitChange();
+        case ActionTypes.AUTH_FAIL:
+            AuthStore.setStatus(AuthStatuses.ERROR);
+            AuthStore.emitChange();
             break;
         default:
             break;
@@ -906,7 +888,6 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             activeContactId = ContactsStore.getActive();
 
             MessageStore.addMessage(contactId, message, activeContactId);
-            FullImageStore.putFullImage(message.id, outMsg.fullImage);
 
             if(outMsg.receiver == activeContactId) {
                 MessageStore.emitUpdate();
@@ -918,9 +899,8 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             message = CoreUtils.mapMessageFromRaw(inMsg);
             activeContactId = ContactsStore.getActive();
             MessageStore.addMessage(message.to, message, activeContactId);
-            FullImageStore.putFullImage(message.id, inMsg.fullImage);
 
-            if(inMsg.sender == activeContactId) {
+            if(inMsg.sender == activeContactId || inMsg.receiver == activeContactId) {
                 MessageStore.emitUpdate();
             }
             MessageStore.emitChange();
@@ -934,6 +914,19 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
                     _messages[_preActiveContactId].firstUnreadMsgId = null;
                 }
             }
+            break;
+        case ActionTypes.UPDATE_MESSAGE_CONTENT:
+            var payload = action.payload;
+            var data = payload.data;
+            var msg = _messages[payload.receiver].messages[payload.tempMessageId];
+            msg.id = data.id;
+            if (data.contentType == MessageContentTypes.IMAGE) {
+                msg.fullImageUrl = data.fullImageUrl;
+            }
+            if(data.receiver == activeContactId) {
+                MessageStore.emitUpdate();
+            }
+            MessageStore.emitChange();
             break;
 
         default:
@@ -1096,10 +1089,9 @@ var UploadImageButton = React.createClass({displayName: "UploadImageButton",
 });
 
 
-var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessage",
+var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessage", //AAA
     _onDownloadMessages: function(e){
-        var message = FullImageStore.getFullImage(this.props.data.id);
-        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
         e.stopPropagation();
     },
@@ -1134,7 +1126,7 @@ var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessa
                         CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
-                        this.props.data.from || 'Empty sender', 
+                        this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
                     "  ", 
@@ -1151,8 +1143,7 @@ var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessa
 var UnreadIncomingMessage = React.createClass({displayName: "UnreadIncomingMessage",
     scrolled: false,
     _onDownloadMessages: function(e){
-        var message = FullImageStore.getFullImage(this.props.data.id);
-        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
         e.stopPropagation();
     },
@@ -1202,7 +1193,7 @@ var UnreadIncomingMessage = React.createClass({displayName: "UnreadIncomingMessa
                 React.createElement("div", {className: "message-data"}, 
                     React.createElement("span", {className: "message-data-name"}, 
                         React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'offline')}), 
-                        this.props.data.from || 'Not specified', 
+                        this.props.data.fromName || 'Not specified', 
                         this._operatorStatus()
                     ), 
                     React.createElement("span", {className: "message-data-time"}, 
@@ -1252,7 +1243,7 @@ var UnreadEndConversationMessage = React.createClass({displayName: "UnreadEndCon
                          CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
-                        this.props.data.from || 'Empty sender', 
+                        this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
                     "  ", 
@@ -1292,8 +1283,8 @@ var TypingMessage = React.createClass({displayName: "TypingMessage",
 
 var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
     _onDownloadMessages: function(e){
-        var message = FullImageStore.getFullImage(this.props.data.id);
-        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        //TODO: Insert usage of fullImageUrl
+        CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
         e.stopPropagation();
     },
@@ -1327,7 +1318,7 @@ var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
                         CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
-                        this.props.data.from || 'Empty sender', 
+                        this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
                     "  ", 
@@ -1529,8 +1520,8 @@ var LoginBox = React.createClass({displayName: "LoginBox",
 
 var IncomingMessage = React.createClass({displayName: "IncomingMessage",
     _onDownloadMessages: function(e){
-        var message = FullImageStore.getFullImage(this.props.data.id);
-        CoreUtils.downloadImage(message, 'Image viewing', 'chat-thumbnail.png');
+        //TODO: Insert fullImageUrl
+        CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
         e.stopPropagation();
     },
@@ -1569,7 +1560,7 @@ var IncomingMessage = React.createClass({displayName: "IncomingMessage",
                 React.createElement("div", {className: "message-data"}, 
                     React.createElement("span", {className: "message-data-name"}, 
                         React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'offline')}), 
-                        this.props.data.from || 'Not specified', 
+                        this.props.data.fromName || 'Not specified', 
                         this.operatorStatus()
                     ), 
                     React.createElement("span", {className: "message-data-time"}, 
@@ -1748,10 +1739,11 @@ var FooterBox = React.createClass({displayName: "FooterBox",
         if(this.state.value.trim() !== '') {
             var dt = new Date();
             var msg = {
-                id: null,
+                id: 'temp_' + (++_lastMessageId),
                 message: this.state.value,
-                sender: this.props.operator,
-                receiver: this.props.contact,
+                sender: this.props.operator.nick,
+                operatorName: this.props.operator.name,
+                receiver: this.props.contact.name,
                 contentType: MessageContentTypes.TEXT,
                 messageType: MessageTypes.OUTGOING,
                 date: dt,
@@ -1762,14 +1754,19 @@ var FooterBox = React.createClass({displayName: "FooterBox",
         }
     },
     sendEndMessage: function(e){
-        ChatActions.outgoingMessage(
-            null,
-            'End of conversation',
-            this.props.operator,
-            this.props.contact,
-            MessageContentTypes.TEXT,
-            MessageTypes.END_OF_CONVERSATION
-        );
+        var dt = new Date();
+        var msg = {
+            id: null,
+            message: 'End of conversation',
+            sender: this.props.operator.nick,
+            operatorName: this.props.operator.name,
+            receiver: this.props.contact.name,
+            contentType: MessageContentTypes.TEXT,
+            messageType: MessageTypes.END_OF_CONVERSATION,
+            date: dt,
+            fullImage: null
+        };
+        ChatActions.outgoingMessage(msg);
     },
     handleChange: function(event){
         this.setState({value: event.target.value});
@@ -1784,8 +1781,9 @@ var FooterBox = React.createClass({displayName: "FooterBox",
         var msg = {
             id: null,
             message: b64string,
-            sender: this.props.operator,
-            receiver: this.props.contact,
+            sender: this.props.operator.nick,
+            operatorName: this.props.operator.name,
+            receiver: this.props.contact.name,
             contentType: MessageContentTypes.IMAGE,
             messageType: MessageTypes.OUTGOING,
             date: dt,
@@ -1836,7 +1834,7 @@ var EndConversationMessage = React.createClass({displayName: "EndConversationMes
                          CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
-                        this.props.data.from || 'Empty sender', 
+                        this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
                     "  ", 
@@ -2281,7 +2279,6 @@ var chatBox = ReactDOM.render(
                     AuthStore: AuthStore,
                     ContactsStore: ContactsStore,
                     MessageStore: MessageStore,
-                    FullImageStore: FullImageStore,
                     ParticipantsStore: ParticipantsStore,
                     UnreadMessageStore: UnreadMessageStore
                 },
