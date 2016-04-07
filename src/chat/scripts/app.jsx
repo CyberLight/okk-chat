@@ -410,10 +410,11 @@ var ChatActions = {
     },
 
     fetchContactHistory: function(contact, firstMessageId){
+        var normalizedMessageId = firstMessageId && +firstMessageId.replace(/m_|temp_/i, '');
         ChatDispatcher.dispatch({
            type: ActionTypes.API_FETCH_CONTACT_HISTORY,
            contact: contact,
-           firstMessageId: firstMessageId
+           firstMessageId: normalizedMessageId
         });
     }
 };
