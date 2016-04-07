@@ -9,6 +9,20 @@ var _activeContactId,
     _contactFilterPattern = '',
     _currentOperator;
 
+var keyMirror = function(obj) {
+    var ret = {};
+    var key;
+    if (!(obj instanceof Object && !Array.isArray(obj))) {
+        throw new Error('keyMirror(...): Argument must be an object.');
+    }
+    for (key in obj) {
+        if (obj.hasOwnProperty(key)) {
+            ret[key] = key;
+        }
+    }
+    return ret;
+};
+
 var MessageContentTypes = {
     IMAGE: 'image',
     TEXT: 'text'
@@ -20,34 +34,35 @@ var MessageTypes = {
     END_OF_CONVERSATION: 'end-of-conversation'
 };
 
-var ChatConstants = {
-    MESSAGE_CHANGE_EVENT: 'MESSAGE_CHANGED_EVENT',
-    CONTACT_SELECT_EVENT: 'CONTACT_SELECT_EVENT',
-    MESSAGE_UPDATE_EVENT: 'MESSAGE_UPDATE_EVENT',
-    CONTACTS_CHANGE_EVENT: 'CONTACTS_CHANGE_EVENT',
-    FULL_IMAGES_CHANGE_EVENT: 'FULL_IMAGES_CHANGE_EVENT',
-    OPERATOR_CHANGED: 'OPERATOR_CHANGED',
-    PARTICIPANTS_CHANGED: 'PARTICIPANTS_CHANGED'
-};
+var ChatConstants = keyMirror({
+    MESSAGE_CHANGE_EVENT: null,
+    CONTACT_SELECT_EVENT: null,
+    MESSAGE_UPDATE_EVENT: null,
+    CONTACTS_CHANGE_EVENT: null,
+    FULL_IMAGES_CHANGE_EVENT: null,
+    OPERATOR_CHANGED: null,
+    PARTICIPANTS_CHANGED: null
+});
 
-var ActionTypes = {
-    CLICK_CONTACT: 'CLICK_CONTACT',
-    RECEIVE_RAW_MESSAGES: 'RECEIVE_RAW_MESSAGES',
-    NEW_OUT_MESSAGE: 'NEW_OUT_MESSAGE',
-    NEW_IN_MESSAGE: 'NEW_IN_MESSAGE',
-    READ_MESSAGES: 'READ_MESSAGES',
-    CONTACT_MESSAGES_SCROLL: 'CONTACT_MESSAGES_SCROLL',
-    CONTACT_FILTER: 'CONTACT_FILTER',
-    CLEAR_SELECTED_CONTACT: 'CLEAR_SELECTED_CONTACT',
-    AUTH_SUCCESS: 'AUTH_SUCCESS',
-    AUTH_FAIL: 'AUTH_FAIL',
-    PUT_FULL_IMAGE: 'PUT_FULL_IMAGE',
-    API_FETCH_CONTACTS: 'API_FETCH_CONTACTS',
-    API_AUTH_OPERATOR: 'API_AUTH_OPERATOR',
-    API_FETCH_CONTACT_MESSAGES: 'API_FETCH_CONTACT_MESSAGES',
-    API_FETCH_CONTACT_HISTORY: 'API_FETCH_CONTACT_HISTORY',
-    UPDATE_MESSAGE_CONTENT: 'UPDATE_MESSAGE_CONTENT'
-};
+var ActionTypes = keyMirror({
+    CLICK_CONTACT: null,
+    RECEIVE_RAW_MESSAGES: null,
+    NEW_OUT_MESSAGE: null,
+    NEW_IN_MESSAGE: null,
+    READ_MESSAGES: null,
+    CONTACT_MESSAGES_SCROLL: null,
+    CONTACT_FILTER: null,
+    CLEAR_SELECTED_CONTACT: null,
+    AUTH_SUCCESS: null,
+    AUTH_FAIL: null,
+    PUT_FULL_IMAGE: null,
+    API_FETCH_CONTACTS: null,
+    API_AUTH_OPERATOR: null,
+    API_FETCH_CONTACT_MESSAGES: null,
+    API_FETCH_CONTACT_HISTORY: null,
+    UPDATE_MESSAGE_CONTENT: null,
+    CLIENT_STATUS_CHANGED: null
+});
 
 var AuthStatuses = {
     SUCCESS: 1,
@@ -246,6 +261,16 @@ var CoreUtils = {
 /***********************************/
 
 var ChatActions = {
+    clientStatusChanged: function(id, username, status){
+        ChatDispatcher.dispatch({
+            type: ActionTypes.CLIENT_STATUS_CHANGED,
+            payload: {
+                id: id,
+                username: username,
+                status: status
+            }
+        });
+    },
     updateMessageContent: function(receiver, tempMessageId, data){
         ChatDispatcher.dispatch({
             type: ActionTypes.UPDATE_MESSAGE_CONTENT,
@@ -382,10 +407,11 @@ var ChatActions = {
         });
     },
 
-    fetchContactHistory: function(contact){
+    fetchContactHistory: function(contact, firstMessageId){
         ChatDispatcher.dispatch({
            type: ActionTypes.API_FETCH_CONTACT_HISTORY,
-           contact: contact
+           contact: contact,
+           firstMessageId: firstMessageId
         });
     }
 };
@@ -516,6 +542,16 @@ var UnreadMessageStore = objectAssign({}, EventEmitter.prototype, {
 });
 
 var MessageStore = objectAssign({}, EventEmitter.prototype, {
+    getFirstMessageId: function(contact){
+        var messages = _messages[contact].messages;
+        if (!messages) return null;
+
+        var keys = Object.keys(messages);
+        if (!keys.length) return null;
+
+        var firstKey = keys[0];
+        return messages[firstKey].id || null;
+    },
     addContactRawMessages: function(operator, contactId, rawMessages){ //AAA
         var historyMessages = {};
 
@@ -639,7 +675,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
     addOutMessage: function(data){
         _lastMessageId++;
         var message = {
-            id: data.id, //CHANGED
+            id: data.id,
             from: data.operator.nick,
             fromName: data.operator.name,
             to: data.contact.name,
@@ -856,9 +892,17 @@ ContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
         case ActionTypes.CLEAR_SELECTED_CONTACT:
             ContactsStore.clearContact();
             break;
+
         case ActionTypes.API_FETCH_CONTACT_HISTORY:
             ContactsStore.setLoadingState(action.contact.name, 'loading');
             break;
+
+        case ActionTypes.CLIENT_STATUS_CHANGED:
+            var data = action.payload;
+            _contacts[data.mobile].status = data.status;
+            ContactsStore.emitChange();
+            break;
+
         default:
             break;
     }
@@ -1089,7 +1133,7 @@ var UploadImageButton = React.createClass({displayName: "UploadImageButton",
 });
 
 
-var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessage", //AAA
+var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessage",
     _onDownloadMessages: function(e){
         CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
@@ -2160,10 +2204,11 @@ var ChatBox = React.createClass({displayName: "ChatBox",
     },
 
     _storeContactsChange: function(){
+        var currentContact = this.state.currentContact || {};
         this.setState({
-            chatState: 'no-chat',
-            currentContact: {},
-            messages: [],
+            chatState: currentContact ? 'chat' : 'no-chat',
+            currentContact: currentContact,
+            messages: MessageStore.getMessages(currentContact.name),
             contacts: ContactsStore.getAll()
         });
     },
@@ -2208,7 +2253,8 @@ var ChatBox = React.createClass({displayName: "ChatBox",
         });
     },
     _onLoadHistory: function(contact){
-        ChatActions.fetchContactHistory(contact);
+        var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+        ChatActions.fetchContactHistory(contact, firstMsgId);
     },
     onOutgoingMessage: function(data){
         var operator = this.state.operator;
