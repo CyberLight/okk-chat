@@ -9,6 +9,13 @@
     <script src="/vendor/dev/react/react-dom.js"></script>
     <script src="/vendor/dev/react/browser.min.js"></script>
     <script src="/helpers/resources.js"></script>
+
+    <!-- Socket.io enable extra headers -->
+    <script>
+        global = window;
+        XMLHttpRequest.prototype.setDisableHeaderCheck = function(){}
+    </script>
+    <script src="/example/socket.io.js"></script>
 </head>
 <body>
     <div id="chatbox"></div>

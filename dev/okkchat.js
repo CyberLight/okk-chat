@@ -758,6 +758,7 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     },
 
     setFilter: function(pattern){
+        this.clearContact();
         _contactFilterPattern = pattern;
     },
 
@@ -899,7 +900,7 @@ ContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
 
         case ActionTypes.CLIENT_STATUS_CHANGED:
             var data = action.payload;
-            _contacts[data.mobile].status = data.status;
+            _contacts[data.username].status = data.status;
             ContactsStore.emitChange();
             break;
 
@@ -1643,6 +1644,7 @@ var HistoryButton = React.createClass({displayName: "HistoryButton",
 
 var HistoryBox = React.createClass({displayName: "HistoryBox",
     scroll: 0,
+    canScroll: true,
     renderMessage: function(message){
         var contact = this.props.contact;
         switch(message.messageType){
@@ -1692,15 +1694,14 @@ var HistoryBox = React.createClass({displayName: "HistoryBox",
         }
     },
     _scrollToFirstUnread: function(){
-        var BOTTOM_OFFSET = 50;
         var unreadItem = this.refs.unreadItem;
         var node = ReactDOM.findDOMNode(this);
         if(unreadItem && unreadItem.canScroll()){
             this.refs.unreadItem.scrollIntoViewIfNeeded(node, true);
-            this.scroll = node.scrollHeight - BOTTOM_OFFSET;
+            this.scroll = node.scrollHeight - node.offsetHeight;
         } else if (this.canScroll) {
             node.scrollTop = node.scrollHeight;
-            this.scroll = node.scrollTop;
+            this.scroll = node.scrollHeight - node.offsetHeight;
         }
     },
     _onLoadHistory: function(){
@@ -1716,7 +1717,7 @@ var HistoryBox = React.createClass({displayName: "HistoryBox",
             this.scroll = 0;
         }
         var node = ReactDOM.findDOMNode(this);
-        this.canScroll = node.scrollTop >= this.scroll;
+        this.canScroll = !this.props.messages.length || node.scrollTop >= this.scroll;
     },
     componentDidUpdate: function() {
         this._scrollToFirstUnread();
@@ -2204,11 +2205,12 @@ var ChatBox = React.createClass({displayName: "ChatBox",
     },
 
     _storeContactsChange: function(){
-        var currentContact = this.state.currentContact || {};
+        var currentContact = ContactsStore.getCurrentContact();
+        var name = currentContact && currentContact.name || null;
         this.setState({
             chatState: currentContact ? 'chat' : 'no-chat',
             currentContact: currentContact,
-            messages: MessageStore.getMessages(currentContact.name),
+            messages: MessageStore.getMessages(name),
             contacts: ContactsStore.getAll()
         });
     },
