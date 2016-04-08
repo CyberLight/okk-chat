@@ -141,6 +141,7 @@ function OkkChatReady(OkkChatApi) {
                     contentType: msg.contentType,
                     messageType: msg.messageType,
                     date: OkkChatApi.CoreUtils.formatDate(msg.date),
+                    endOfConversation: msg.endOfConversation,
                     operator: true
                 };
                 ServerAPI.sendMessageToServer(rawMessage);

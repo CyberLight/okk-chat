@@ -30,8 +30,7 @@ var MessageContentTypes = {
 
 var MessageTypes = {
     INCOMING: 'in',
-    OUTGOING: 'out',
-    END_OF_CONVERSATION: 'end-of-conversation'
+    OUTGOING: 'out'
 };
 
 var ChatConstants = keyMirror({
@@ -121,9 +120,7 @@ var CoreUtils = {
             ].join(':');
     },
     mapMessageFromRaw: function(raw, isRead, operatorName){
-        var messageType = raw.messageType;
-
-        if(messageType != MessageTypes.END_OF_CONVERSATION && operatorName){
+        if(operatorName){
             raw.messageType = raw.sender != operatorName
                 ? MessageTypes.INCOMING
                 : MessageTypes.OUTGOING;
@@ -145,6 +142,7 @@ var CoreUtils = {
             messageType: raw.messageType,
             operator: raw.operator,
             date: raw.date,
+            endOfConversation: raw.endOfConversation,
             fullImageUrl: raw.fullImageUrl,
             sending: raw.sending || false,
             isRead: !!isRead
@@ -297,6 +295,7 @@ var ChatActions = {
                 date: data.date,
                 fullImage: data.fullImage,
                 sending: data.sending,
+                endOfConversation: data.endOfConversation,
                 operator: true
             }
         });
@@ -328,6 +327,7 @@ var ChatActions = {
                     contentType: msg.contentType,
                     messageType: msg.messageType || MessageTypes.INCOMING,
                     date: msg.date,
+                    endOfConversation: msg.endOfConversation,
                     fullImage: null,
                     fullImageUrl: msg.fullImageUrl,
                     operator: msg.operator,
@@ -345,6 +345,7 @@ var ChatActions = {
                     contentType: msg.contentType,
                     messageType: msg.messageType || MessageTypes.INCOMING,
                     date: msg.date,
+                    endOfConversation: msg.endOfConversation,
                     fullImage: null,
                     fullImageUrl: null,
                     operator: msg.operator,
@@ -410,7 +411,8 @@ var ChatActions = {
     },
 
     fetchContactHistory: function(contact, firstMessageId){
-        var normalizedMessageId = firstMessageId && +firstMessageId.replace(/m_|temp_/i, '');
+        var searchRegex = /m_|temp_/i;
+        var normalizedMessageId = firstMessageId && +((""+firstMessageId).replace(searchRegex, ''));
         ChatDispatcher.dispatch({
            type: ActionTypes.API_FETCH_CONTACT_HISTORY,
            contact: contact,
@@ -685,6 +687,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             message: data.data.message,
             contentType: data.type,
             messageType: MessageTypes.OUTGOING,
+            endOfConversation: data.endOfConversation,
             operator: true,
             date: data.date,
             isRead: true
@@ -903,7 +906,16 @@ ContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
 
         case ActionTypes.CLIENT_STATUS_CHANGED:
             var data = action.payload;
-            _contacts[data.username].status = data.status;
+            if(_contacts[data.username]) {
+                _contacts[data.username].status = data.status;
+            } else {
+                _contacts[data.username] = {
+                    id: data.id,
+                    name: data.username,
+                    status: data.status,
+                    loadStatus: 'init'
+                };
+            }
             ContactsStore.emitChange();
             break;
 
@@ -1662,47 +1674,66 @@ var HistoryBox = React.createClass({displayName: "HistoryBox",
         switch(message.messageType){
             case MessageTypes.INCOMING:
                 if(message.firstUnread){
-                    return (
-                        React.createElement(UnreadIncomingMessage, {ref: "unreadItem", 
-                                               key: message.id, 
-                                               data: message, 
-                                               status: contact.status})
-                    )
+                    if(message.endOfConversation) {
+                        return (
+                            React.createElement(UnreadEndConversationMessage, {key: message.id, 
+                                                          data: message, 
+                                                          status: contact.status})
+                        );
+                    } else {
+                        return (
+                            React.createElement(UnreadIncomingMessage, {ref: "unreadItem", 
+                                                   key: message.id, 
+                                                   data: message, 
+                                                   status: contact.status})
+                        );
+                    }
                 }
-                return (
-                    React.createElement(IncomingMessage, {key: message.id, 
-                                     data: message, 
-                                     status: contact.status})
-                );
+
+                if(message.endOfConversation) {
+                    return (
+                        React.createElement(EndConversationMessage, {key: message.id, 
+                                                data: message, 
+                                                status: contact.status})
+                    );
+                } else {
+                    return (
+                        React.createElement(IncomingMessage, {key: message.id, 
+                                         data: message, 
+                                         status: contact.status})
+                    );
+                }
             case MessageTypes.OUTGOING:
                 if(message.firstUnread){
-                    return (
-                        React.createElement(UnreadOutgoingMessage, {ref: "unreadItem", 
-                                               key: message.id, 
-                                               data: message, 
-                                               status: contact.status})
-                    )
+                    if(message.endOfConversation) {
+                        return (
+                            React.createElement(UnreadEndConversationMessage, {key: message.id, 
+                                                          data: message, 
+                                                          status: contact.status})
+                        )
+                    } else {
+                        return (
+                            React.createElement(UnreadOutgoingMessage, {ref: "unreadItem", 
+                                                   key: message.id, 
+                                                   data: message, 
+                                                   status: contact.status})
+                        );
+                    }
                 }
-                return (
-                    React.createElement(OutgoingMessage, {key: message.id, 
-                                     data: message, 
-                                     status: contact.status})
-                );
-            case MessageTypes.END_OF_CONVERSATION:
-                if(message.firstUnread){
-                    return (
-                        React.createElement(UnreadEndConversationMessage, {ref: "unreadItem", 
-                                                      key: message.id, 
-                                                      data: message, 
-                                                      status: contact.status})
-                    )
-                }
-                return (
-                    React.createElement(EndConversationMessage, {key: message.id, 
-                                            data: message, 
-                                            status: contact.status})
-                );
 
+                if(message.endOfConversation) {
+                    return (
+                        React.createElement(EndConversationMessage, {key: message.id, 
+                                                data: message, 
+                                                status: contact.status})
+                    );
+                }else{
+                    return (
+                        React.createElement(OutgoingMessage, {key: message.id, 
+                                         data: message, 
+                                         status: contact.status})
+                    );
+                }
         }
     },
     _scrollToFirstUnread: function(){
@@ -1803,6 +1834,7 @@ var FooterBox = React.createClass({displayName: "FooterBox",
                 receiver: this.props.contact.name,
                 contentType: MessageContentTypes.TEXT,
                 messageType: MessageTypes.OUTGOING,
+                endOfConversation: false,
                 date: dt,
                 sending: true,
                 fullImage: null
@@ -1814,13 +1846,14 @@ var FooterBox = React.createClass({displayName: "FooterBox",
     sendEndMessage: function(e){
         var dt = new Date();
         var msg = {
-            id: null,
+            id: 'temp_' + (++_lastMessageId),
             message: 'End of conversation',
             sender: this.props.operator.nick,
             operatorName: this.props.operator.name,
             receiver: this.props.contact.name,
             contentType: MessageContentTypes.TEXT,
-            messageType: MessageTypes.END_OF_CONVERSATION,
+            messageType: MessageTypes.OUTGOING,
+            endOfConversation: true,
             date: dt,
             sending: true,
             fullImage: null
@@ -1845,6 +1878,7 @@ var FooterBox = React.createClass({displayName: "FooterBox",
             receiver: this.props.contact.name,
             contentType: MessageContentTypes.IMAGE,
             messageType: MessageTypes.OUTGOING,
+            endOfConversation: false,
             date: dt,
             sending: true,
             fullImage: fullBase64string
