@@ -437,6 +437,19 @@ var ChatActions = {
 /**************************************************/
 
 var AuthStore = objectAssign({}, EventEmitter.prototype, {
+    errors: [],
+
+    _clearErrors: function(){
+        this.errors = [];
+    },
+
+    _addError: function(error){
+        this.errors.push(error);
+    },
+
+    getErrors: function(){
+        return this.errors;
+    },
 
     emitChange: function() {
         this.emit(ChatConstants.OPERATOR_CHANGED);
@@ -859,6 +872,8 @@ AuthStore.dispatchToken = ChatDispatcher.register(function(action) {
             break;
         case ActionTypes.AUTH_FAIL:
             AuthStore.setStatus(AuthStatuses.ERROR);
+            AuthStore._clearErrors();
+            AuthStore._addError(action.error);
             AuthStore.emitChange();
             break;
         case ActionTypes.OPERATOR_STATUS_CHANGED:
@@ -1531,7 +1546,11 @@ var LoginBox = React.createClass({displayName: "LoginBox",
     },
 
     getInitialState: function() {
-        return {loginState: this.props.initialLoginState || 'login'};
+        return {
+            loginState: this.props.initialLoginState || 'login',
+            error: false,
+            messages: AuthStore.getErrors()
+        };
     },
     _onAuthChanged: function(){
         if(AuthStore.getStatus() === AuthStatuses.SUCCESS) {
@@ -1565,18 +1584,41 @@ var LoginBox = React.createClass({displayName: "LoginBox",
     successState: function(){
         this.setState({
             loginState: 'success',
-            originalState: 'success'
+            originalState: 'success',
+            error: false,
+            messages: []
         });
     },
     tryAgainState: function(){
         this.setState({
             loginState: 'login',
-            originalState: 'login'
+            originalState: 'login',
+            error: true,
+            messages: AuthStore.getErrors()
         });
     },
     loginClick: function(e){
         this.progressState();
-        ChatActions.authenticate({session: 'EdsSRssdAQwDRtdf'});
+        ChatActions.authenticate();
+    },
+    _renderErrorInfo: function(){
+        if(this.state.error){
+            return (
+                React.createElement("div", {className: "error-box"}, 
+                    React.createElement("ul", null, 
+                        
+                            this.state.messages.map(function (errMessage) {
+                                return (
+                                    React.createElement("li", null, errMessage)
+                                )
+                            })
+                        
+                    )
+                )
+            )
+        }else{
+            return "";
+        }
     },
     renderState: function(){
         switch(this.state.loginState){
@@ -1589,6 +1631,7 @@ var LoginBox = React.createClass({displayName: "LoginBox",
                     React.createElement("div", {className: "chat"}, 
                         React.createElement(EmptyHeaderBox, {onMinimize: this._onMinimize}), 
                         React.createElement("div", {className: "wrapper"}, 
+                            this._renderErrorInfo(), 
                             React.createElement("button", {className: "login-btn", onClick: this.loginClick}, 
                                 React.createElement("i", {className: "chat-spinner"}), 
                                 React.createElement("span", {className: "state"}, "Log in")

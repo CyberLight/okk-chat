@@ -437,6 +437,19 @@ var ChatActions = {
 /**************************************************/
 
 var AuthStore = objectAssign({}, EventEmitter.prototype, {
+    errors: [],
+
+    _clearErrors: function(){
+        this.errors = [];
+    },
+
+    _addError: function(error){
+        this.errors.push(error);
+    },
+
+    getErrors: function(){
+        return this.errors;
+    },
 
     emitChange: function() {
         this.emit(ChatConstants.OPERATOR_CHANGED);
@@ -859,6 +872,8 @@ AuthStore.dispatchToken = ChatDispatcher.register(function(action) {
             break;
         case ActionTypes.AUTH_FAIL:
             AuthStore.setStatus(AuthStatuses.ERROR);
+            AuthStore._clearErrors();
+            AuthStore._addError(action.error);
             AuthStore.emitChange();
             break;
         case ActionTypes.OPERATOR_STATUS_CHANGED:
@@ -1531,7 +1546,11 @@ var LoginBox = React.createClass({
     },
 
     getInitialState: function() {
-        return {loginState: this.props.initialLoginState || 'login'};
+        return {
+            loginState: this.props.initialLoginState || 'login',
+            error: false,
+            messages: AuthStore.getErrors()
+        };
     },
     _onAuthChanged: function(){
         if(AuthStore.getStatus() === AuthStatuses.SUCCESS) {
@@ -1565,18 +1584,41 @@ var LoginBox = React.createClass({
     successState: function(){
         this.setState({
             loginState: 'success',
-            originalState: 'success'
+            originalState: 'success',
+            error: false,
+            messages: []
         });
     },
     tryAgainState: function(){
         this.setState({
             loginState: 'login',
-            originalState: 'login'
+            originalState: 'login',
+            error: true,
+            messages: AuthStore.getErrors()
         });
     },
     loginClick: function(e){
         this.progressState();
-        ChatActions.authenticate({session: 'EdsSRssdAQwDRtdf'});
+        ChatActions.authenticate();
+    },
+    _renderErrorInfo: function(){
+        if(this.state.error){
+            return (
+                <div className="error-box">
+                    <ul>
+                        {
+                            this.state.messages.map(function (errMessage) {
+                                return (
+                                    <li>{errMessage}</li>
+                                )
+                            })
+                        }
+                    </ul>
+                </div>
+            )
+        }else{
+            return "";
+        }
     },
     renderState: function(){
         switch(this.state.loginState){
@@ -1589,6 +1631,7 @@ var LoginBox = React.createClass({
                     <div className="chat">
                         <EmptyHeaderBox onMinimize={this._onMinimize}/>
                         <div className="wrapper">
+                            {this._renderErrorInfo()}
                             <button className="login-btn" onClick={this.loginClick}>
                                 <i className="chat-spinner"></i>
                                 <span className="state">Log in</span>

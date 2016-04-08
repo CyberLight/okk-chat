@@ -390,6 +390,7 @@
     padding: 20px;
     background: rgba(4, 40, 68, 0.85);
     height: 445px;
+    position: relative;
 }
 
 .chat .wrapper.loading {
@@ -562,4 +563,24 @@
 
 .people-list .operator-info.operator-offline{
     color: #E38968;
+}
+
+.chat .error-box {
+    top: 0;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    position: absolute;
+    padding: 0px;
+    color: whitesmoke;
+    background-color: #ff7e76;
+    margin-bottom: 14px;
+}
+
+.chat .error-box ul {
+    padding: 0 14px;
+}
+
+.chat .error-box li {
+    list-style: none;
 }
