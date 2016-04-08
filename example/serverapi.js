@@ -24,10 +24,12 @@ function OkkChatReady(OkkChatApi) {
             socket.on('connect', function(){
                 console.log('connected!!!');
                 self._socket = socket;
+                OkkChatApi.Actions.operatorStatusChanged('online');
             });
 
             socket.on('disconnect', function(){
                 console.log('disconnect!!!');
+                OkkChatApi.Actions.operatorStatusChanged('offline');
             });
 
             socket.on('incoming:message', function (response) {
@@ -95,7 +97,7 @@ function OkkChatReady(OkkChatApi) {
                             id: user.id,
                             name: user.first_name,
                             nick: user.username,
-                            status: user.status
+                            status: 'online'
                         };
                         OkkChatApi.Actions.authSuccess(operator);
                         ServerAPI._connectToSocket();

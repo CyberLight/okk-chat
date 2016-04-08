@@ -60,7 +60,8 @@ var ActionTypes = keyMirror({
     API_FETCH_CONTACT_MESSAGES: null,
     API_FETCH_CONTACT_HISTORY: null,
     UPDATE_MESSAGE_CONTENT: null,
-    CLIENT_STATUS_CHANGED: null
+    CLIENT_STATUS_CHANGED: null,
+    OPERATOR_STATUS_CHANGED: null
 });
 
 var AuthStatuses = {
@@ -260,6 +261,14 @@ var CoreUtils = {
 /***********************************/
 
 var ChatActions = {
+    operatorStatusChanged: function(status){
+        ChatDispatcher.dispatch({
+            type: ActionTypes.OPERATOR_STATUS_CHANGED,
+            payload: {
+                status: status
+            }
+        });
+    },
     clientStatusChanged: function(id, username, status){
         ChatDispatcher.dispatch({
             type: ActionTypes.CLIENT_STATUS_CHANGED,
@@ -852,6 +861,10 @@ AuthStore.dispatchToken = ChatDispatcher.register(function(action) {
             AuthStore.setStatus(AuthStatuses.ERROR);
             AuthStore.emitChange();
             break;
+        case ActionTypes.OPERATOR_STATUS_CHANGED:
+            _currentOperator.status = action.payload.status;
+            AuthStore.emitChange();
+            break;
         default:
             break;
     }
@@ -1033,6 +1046,35 @@ UnreadMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 /************************************************************/
 /*                 COMPONENTS                               */
 /************************************************************/
+
+var OperatorInfo = React.createClass({
+    getInitialState: function(){
+        return {
+            operator: AuthStore.getOperator()
+        }
+    },
+    componentDidMount: function() {
+        AuthStore.addChangeListener(this._onAuthChanged);
+    },
+
+    componentWillUnmount: function() {
+        AuthStore.removeChangeListener(this._onAuthChanged);
+    },
+    _onAuthChanged: function(){
+        this.setState({
+           operator: AuthStore.getOperator()
+        });
+    },
+    render: function() {
+        return (
+            <div className={"operator-info operator-" + this.state.operator.status}>
+                <i className={"fa fa-circle " + this.state.operator.status || 'offline'}/>
+                &nbsp;&nbsp;
+                <b>{this.state.operator.name}</b> {"(" + this.state.operator.nick + ")"}
+            </div>
+        );
+    }
+});
 
 var LoadMessageHistoryButton = React.createClass({
     getInitialState: function() {
@@ -2113,6 +2155,7 @@ var ContactsBox = React.createClass({
                 <ContactSearchBox onLiveSearch={this._onLiveSearch}
                                   onSearch={this._onSearch}
                                   onClear={this._onClear}/>
+                <OperatorInfo/>
                 <ContactsListBox items={this.props.contacts}
                                  current={this.props.current}
                                  onSelectContact={this._onSelectContact}/>
@@ -2229,15 +2272,21 @@ var ChatBox = React.createClass({
     },
 
     componentDidMount: function() {
+        AuthStore.addChangeListener(this._onAuthChanged);
         ContactsStore.addChangeListener(this._storeContactsChange);
         ContactsStore.addContactSelectListener(this._storeContactSelect);
         MessageStore.addUpdateListener(this._storeMessagesChange);
     },
 
     componentWillUnmount: function() {
+        AuthStore.removeChangeListener(this._onAuthChanged);
         ContactsStore.removeChangeListener(this._storeContactsChange);
         ContactsStore.removeContactSelectListener(this._storeContactSelect);
         MessageStore.removeUpdateListener(this._storeMessagesChange);
+    },
+
+    _onAuthChanged: function(){
+        this.setState({operator: AuthStore.getOperator()});
     },
 
     _onSelectContact: function(contact){
