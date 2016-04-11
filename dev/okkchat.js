@@ -341,7 +341,8 @@ var ChatActions = {
                     fullImageUrl: msg.fullImageUrl,
                     operator: msg.operator,
                     operatorName: msg.operatorName
-                }
+                },
+                operator: AuthStore.getOperator()
             });
         }else {
             ChatDispatcher.dispatch({
@@ -359,7 +360,8 @@ var ChatActions = {
                     fullImageUrl: null,
                     operator: msg.operator,
                     operatorName: msg.operatorName
-                }
+                },
+                operator: AuthStore.getOperator()
             });
         }
     },
@@ -984,7 +986,7 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             break;
         case ActionTypes.NEW_IN_MESSAGE:
             var inMsg = action.payload;
-            message = CoreUtils.mapMessageFromRaw(inMsg);
+            message = CoreUtils.mapMessageFromRaw(inMsg, false, action.operator.nick);
             activeContactId = ContactsStore.getActive();
             MessageStore.addMessage(message.to, message, activeContactId);
 
