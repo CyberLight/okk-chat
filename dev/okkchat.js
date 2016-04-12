@@ -1210,6 +1210,15 @@ var UploadImageButton = React.createClass({displayName: "UploadImageButton",
 
 
 var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessage",
+    scrolled: false,
+    canScroll: function(){ return !this.scrolled; },
+    scrollIntoViewIfNeeded: function (parent, centerIfNeeded) {
+        if(!this.scrolled) {
+            var node = ReactDOM.findDOMNode(this);
+            CoreUtils.scrollIntoViewNeeded(parent, node, centerIfNeeded);
+            this.scrolled = true;
+        }
+    },
     _onDownloadMessages: function(e){
         CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
@@ -1402,6 +1411,11 @@ var TypingMessage = React.createClass({displayName: "TypingMessage",
 
 
 var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
+    canScroll: function(){ return true; },
+    scrollIntoViewIfNeeded: function (parent, centerIfNeeded) {
+        var node = ReactDOM.findDOMNode(this);
+        CoreUtils.scrollIntoViewNeeded(parent, node, centerIfNeeded);
+    },
     _onDownloadMessages: function(e){
         CoreUtils.downloadImageByUrl(this.props.data.fullImageUrl, 'Image viewing', 'chat-thumbnail.png');
         e.preventDefault();
