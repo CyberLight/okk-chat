@@ -3,6 +3,35 @@ function OkkChatReady(OkkChatApi) {
 /***********************************************/
 /* Example of Server API class with dispatcher */
 /***********************************************/
+    var IncomingSoundManager = objectAssign({}, {
+        _audio: null,
+        _mute: false,
+        _hasError: false,
+        mute: function(){
+            this._mute = true;
+        },
+        unmute: function(){
+            this._mute = false;
+        },
+        _onerror: function(){
+            this._hasError = true;
+        },
+        hasError: function(){
+            return this._hasError;
+        },
+        play: function(){
+            var url = ChatConfig.INCOMING_MESSAGE_SOUND_PATH || null;
+            if(!this._audio && url){
+                this._audio = new Audio();
+                this._audio.onerror = this._onerror;
+                this._audio.src = url;
+            }
+            if(this._audio && !this.hasError() && !this._mute){
+                this._audio.play();
+            }
+        }
+    });
+
 
     var ServerAPI = objectAssign({}, {
         _loadQueue: {},
@@ -160,6 +189,15 @@ function OkkChatReady(OkkChatApi) {
                 if(added) {
                     ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
                 }
+                break;
+            case OkkChatApi.ActionTypes.NEW_IN_MESSAGE:
+                IncomingSoundManager.play();
+                break;
+            case OkkChatApi.ActionTypes.MUTE_NOTIFICATION_SOUND:
+                IncomingSoundManager.mute();
+                break;
+            case OkkChatApi.ActionTypes.UNMUTE_NOTIFICATION_SOUND:
+                IncomingSoundManager.unmute();
                 break;
             default:
                 break;

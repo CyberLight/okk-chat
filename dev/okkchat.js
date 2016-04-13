@@ -61,7 +61,9 @@ var ActionTypes = keyMirror({
     API_FETCH_CONTACT_HISTORY: null,
     UPDATE_MESSAGE_CONTENT: null,
     CLIENT_STATUS_CHANGED: null,
-    OPERATOR_STATUS_CHANGED: null
+    OPERATOR_STATUS_CHANGED: null,
+    MUTE_NOTIFICATION_SOUND: null,
+    UNMUTE_NOTIFICATION_SOUND: null
 });
 
 var AuthStatuses = {
@@ -261,6 +263,18 @@ var CoreUtils = {
 /***********************************/
 
 var ChatActions = {
+    muteNotifications: function(){
+        ChatDispatcher.dispatch({
+            type: ActionTypes.MUTE_NOTIFICATION_SOUND,
+            payload: {}
+        });
+    },
+    unmuteNotifications: function(){
+        ChatDispatcher.dispatch({
+            type: ActionTypes.UNMUTE_NOTIFICATION_SOUND,
+            payload: {}
+        });
+    },
     operatorStatusChanged: function(status){
         ChatDispatcher.dispatch({
             type: ActionTypes.OPERATOR_STATUS_CHANGED,
@@ -1082,9 +1096,18 @@ var OperatorInfo = React.createClass({displayName: "OperatorInfo",
            operator: AuthStore.getOperator()
         });
     },
+    _onMuteVolumeChange: function(muted){
+          if(muted){
+              ChatActions.muteNotifications();
+          }else{
+              ChatActions.unmuteNotifications();
+          }
+    },
     render: function() {
         return (
             React.createElement("div", {className: "operator-info operator-" + this.state.operator.status}, 
+                React.createElement(MuteUnmuteButton, {muted: false, onChange: this._onMuteVolumeChange}), 
+                "  ", 
                 React.createElement("i", {className: "fa fa-circle " + this.state.operator.status || 'offline'}), 
                 "  ", 
                 React.createElement("b", null, this.state.operator.name), " ", "(" + this.state.operator.nick + ")"
@@ -1745,6 +1768,37 @@ var IncomingMessage = React.createClass({displayName: "IncomingMessage",
     }
 });
 
+var MuteUnmuteButton = React.createClass({displayName: "MuteUnmuteButton",
+    _styles: {
+        cursor:'pointer'
+    },
+    getInitialState: function(){
+        return {
+            muted: this.props.muted || false
+        }
+    },
+    getClasses: function(){
+        var commonClasses = 'msg-badge badge-sm ';
+        if(this.state.muted){
+            return commonClasses + 'fa fa-volume-off';
+        }else{
+            return commonClasses + 'fa fa-volume-up';
+        }
+    },
+    _onClick: function(){
+        if(typeof this.props.onChange == 'function'){
+            this.props.onChange(!this.state.muted);
+        }
+        this.setState({
+           muted: !this.state.muted
+        });
+    },
+    render: function() {
+        return (
+            React.createElement("i", {style: this._styles, onClick: this._onClick, className: this.getClasses()})
+        );
+    }
+});
 
 var IconButton = React.createClass({displayName: "IconButton",
     render: function() {
