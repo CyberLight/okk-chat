@@ -950,8 +950,9 @@ ContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
 
         case ActionTypes.CLIENT_STATUS_CHANGED:
             var data = action.payload;
-            if(_contacts[data.username]) {
-                _contacts[data.username].status = data.status;
+            var contact = _contacts[data.username];
+            if(contact) {
+                contact.status = data.status;
             } else {
                 _contacts[data.username] = {
                     id: data.id,
@@ -2282,7 +2283,6 @@ var Contact = React.createClass({displayName: "Contact",
         var unreadCount = UnreadMessageStore.getCount(this.props.data.name);
         var participants = ParticipantsStore.getParticipants(this.props.data.name);
         return {
-            data: this.props.data || {},
             active: false,
             unread: unreadCount,
             participants: participants
@@ -2300,14 +2300,14 @@ var Contact = React.createClass({displayName: "Contact",
     },
 
     _onUnreadChange: function(){
-        var unread = UnreadMessageStore.getCount(this.state.data.name);
+        var unread = UnreadMessageStore.getCount(this.props.data.name);
         this.setState({
             unread: unread
         });
     },
 
     _participantsChange: function(){
-        var data = ParticipantsStore.getParticipants(this.state.data.name);
+        var data = ParticipantsStore.getParticipants(this.props.data.name);
         if(data.length > 0) {
             this.setState({
                 participants: data
@@ -2333,7 +2333,7 @@ var Contact = React.createClass({displayName: "Contact",
     },
     activateContact: function(){
         if(typeof this.props.onActivate == 'function'){
-            this.props.onActivate(this.state.data);
+            this.props.onActivate(this.props.data);
         }
     },
     getUnreadMessageCount: function(){
@@ -2345,7 +2345,7 @@ var Contact = React.createClass({displayName: "Contact",
         return '';
     },
     clientActive: function(){
-        var contact = this.state.data;
+        var contact = this.props.data;
         if(this.props.selectedId == contact.name){
             return ' active';
         }
@@ -2355,10 +2355,10 @@ var Contact = React.createClass({displayName: "Contact",
         return (
             React.createElement("li", {className: "contact clearfix" + this.clientActive(), onClick: this.activateContact}, 
                 React.createElement("div", {className: "about"}, 
-                    React.createElement("div", {className: "name"}, this.state.data.name || '+000000000000'), 
+                    React.createElement("div", {className: "name"}, this.props.data.name || '+000000000000'), 
                     React.createElement("div", {className: "status"}, 
-                        React.createElement("i", {className: "fa fa-circle " + this.state.data.status || 'offline'}), 
-                        this.state.data.status || 'offline'
+                        React.createElement("i", {className: "fa fa-circle " + this.props.data.status || 'offline'}), 
+                        this.props.data.status || 'offline'
                     ), 
                     React.createElement("div", null, 
                         this._getParticipants()
