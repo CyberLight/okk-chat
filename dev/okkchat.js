@@ -95,6 +95,58 @@ function genNumber(){
 /***********************************/
 
 var CoreUtils = {
+    timeSince: function timeSince(time) {
+
+        switch (typeof time) {
+            case 'number':
+                break;
+            case 'string':
+                time = +new Date(time);
+                break;
+            case 'object':
+                if (time.constructor === Date) time = time.getTime();
+                break;
+            default:
+                time = +new Date();
+        }
+        var time_formats = [
+            [60, 'seconds', 1], // 60
+            [120, '1 minute ago', '1 minute from now'], // 60*2
+            [3600, 'minutes', 60], // 60*60, 60
+            [7200, '1 hour ago', '1 hour from now'], // 60*60*2
+            [86400, 'hours', 3600], // 60*60*24, 60*60
+            [172800, 'Yesterday', 'Tomorrow'], // 60*60*24*2
+            [604800, 'days', 86400], // 60*60*24*7, 60*60*24
+            [1209600, 'Last week', 'Next week'], // 60*60*24*7*4*2
+            [2419200, 'weeks', 604800], // 60*60*24*7*4, 60*60*24*7
+            [4838400, 'Last month', 'Next month'], // 60*60*24*7*4*2
+            [29030400, 'months', 2419200], // 60*60*24*7*4*12, 60*60*24*7*4
+            [58060800, 'Last year', 'Next year'], // 60*60*24*7*4*12*2
+            [2903040000, 'years', 29030400], // 60*60*24*7*4*12*100, 60*60*24*7*4*12
+            [5806080000, 'Last century', 'Next century'], // 60*60*24*7*4*12*100*2
+            [58060800000, 'centuries', 2903040000] // 60*60*24*7*4*12*100*20, 60*60*24*7*4*12*100
+        ];
+        var seconds = (+new Date() - time) / 1000,
+            token = 'ago', list_choice = 1;
+
+        if (Math.floor(seconds) == 0) {
+            return 'Just now'
+        }
+        if (Math.floor(seconds) < 0) {
+            seconds = Math.abs(seconds);
+            token = 'from now';
+            list_choice = 2;
+        }
+        var i = 0, format;
+        while (format = time_formats[i++])
+            if (seconds < format[0]) {
+                if (typeof format[2] == 'string')
+                    return format[list_choice];
+                else
+                    return Math.floor(seconds / format[2]) + ' ' + format[1] + ' ' + token;
+            }
+        return time;
+    },
     padLeft: function(num, base,chr){
         var  len = (String(base || 10).length - String(num).length)+1;
         return len > 0? new Array(len).join(chr || '0')+num : num;
@@ -205,7 +257,7 @@ var CoreUtils = {
             ctx.drawImage(image,0,0,canvas.width, canvas.height);
             var fullB64string = canvas.toDataURL("image/png");
 
-            coefficient = self.getCoefficient(imgWidth, imgHeight, 150);
+            coefficient = self.getCoefficient(imgWidth, imgHeight, 300);
             canvas.width = imgWidth / coefficient;
             canvas.height = imgHeight / coefficient;
 
@@ -1202,7 +1254,7 @@ var UploadImageButton = React.createClass({displayName: "UploadImageButton",
                 ctx.drawImage(self.img,0,0,canvas.width, canvas.height);
                 var fullb64string = canvas.toDataURL("image/png");
 
-                coefficient = self.getCoefficient(imgWidth, imgHeight, 150);
+                coefficient = self.getCoefficient(imgWidth, imgHeight, 300);
                 canvas.width = imgWidth / coefficient;
                 canvas.height = imgHeight / coefficient;
 
@@ -1276,7 +1328,7 @@ var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessa
                 React.createElement("span", {className: "mark"}, "New messages"), 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                        CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
+                        CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
@@ -1350,7 +1402,7 @@ var UnreadIncomingMessage = React.createClass({displayName: "UnreadIncomingMessa
                         this._operatorStatus()
                     ), 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
+                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
                     )
                 ), 
                 React.createElement("div", {className: "message my-message" + this._operatorMsgClasses()}, 
@@ -1393,7 +1445,7 @@ var UnreadEndConversationMessage = React.createClass({displayName: "UnreadEndCon
                 React.createElement("span", {className: "mark"}, "New messages"), 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
+                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
@@ -1481,7 +1533,7 @@ var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
             React.createElement("li", {className: "clearfix"}, 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                        CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
+                        CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
@@ -1758,7 +1810,7 @@ var IncomingMessage = React.createClass({displayName: "IncomingMessage",
                         this.operatorStatus()
                     ), 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
+                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
                     )
                 ), 
                 React.createElement("div", {className: "message my-message" + this._operatorMsgClasses()}, 
@@ -2081,7 +2133,7 @@ var EndConversationMessage = React.createClass({displayName: "EndConversationMes
             React.createElement("li", {className: "clearfix"}, 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ", 'Today'
+                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
