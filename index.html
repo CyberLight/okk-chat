@@ -8,12 +8,16 @@
     <script src="/vendor/prod/react/react-with-addons-0.14.7.min.js"></script>
     <script src="/vendor/dev/react/react-dom.js"></script>
     <script src="/vendor/prod/react/browser.min.js"></script>
-    <script src="/helpers/resources.js"></script>
+    <script src="/config.js"></script>
+    <!-- Socket.io enable extra headers -->
+    <script>
+        global = window;
+        XMLHttpRequest.prototype.setDisableHeaderCheck = function(){}
+    </script>
+    <script src="/example/socket.io.js"></script>
 </head>
 <body>
     <div id="chatbox"></div>
-
-    <script src="/example/serverapi.js"></script>
     <script src="/dist/okkchat.vendor.min.js"></script>
     <script src="/dist/okkchat.min.js"></script>
 </body>
