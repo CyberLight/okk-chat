@@ -7,7 +7,7 @@ var styl = require('gulp-styl');
 var clean = require('gulp-clean');
 
 gulp.task('dev', function(){
-    gulp.src(['src/chat/scripts/app.jsx'])
+    gulp.src(['src/chat/scripts/serverapi.js', 'src/chat/scripts/app.jsx'])
         .pipe(react())
         .pipe(concat('okkchat.js'))
         .pipe(gulp.dest('dev'));
@@ -37,9 +37,8 @@ gulp.task('styles', function() {
 
 gulp.task('build-jsx', function(){
     process.env.NODE_ENV = 'production';
-    gulp.src(['src/chat/scripts/app.jsx'])
+    gulp.src(['src/chat/scripts/serverapi.js', 'src/chat/scripts/app.jsx'])
         .pipe(react())
-        .pipe(browserify())
         .pipe(concat('okkchat.min.js'))
         .pipe(uglify('okkchat.min.js'))
         .pipe(gulp.dest('dist'));

@@ -68,7 +68,6 @@ function OkkChatReady(OkkChatApi) {
 
             socket.on('operator:message', function (response) {
                 var res = JSON.parse(response);
-                console.log("operator:message response", res.id, res.success);
                 var item = this._updateQueue.shift();
                 OkkChatApi.Actions.updateMessageContent(item.to, item.tempMessageId, res);
             }.bind(this));
