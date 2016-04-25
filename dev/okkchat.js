@@ -183,11 +183,13 @@ function OkkChatReady(OkkChatApi) {
                 ServerAPI.authenticate(action.credentials);
                 break;
             case OkkChatApi.ActionTypes.API_FETCH_CONTACT_HISTORY:
-                var contactId = action.contact.name;
-                var added = ServerAPI.pushQueue(contactId);
-                if(added) {
-                    ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
-                }
+                setTimeout(function(){
+                    var contactId = action.contact.name;
+                    var added = ServerAPI.pushQueue(contactId);
+                    if(added) {
+                        ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
+                    }
+                }, 3000);
                 break;
             case OkkChatApi.ActionTypes.NEW_IN_MESSAGE:
                 IncomingSoundManager.play();
@@ -851,6 +853,16 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
 
         var firstKey = keys[0];
         return messages[firstKey].id || null;
+    },
+    getLastMessageId: function(contact){
+        var messages = _messages[contact].messages;
+        if (!messages) return null;
+
+        var keys = Object.keys(messages);
+        if (!keys.length) return null;
+
+        var lastKey = keys[keys.length-1];
+        return messages[lastKey].id || null;
     },
     addContactRawMessages: function(operator, contactId, rawMessages){ //AAA
         var historyMessages = {};
@@ -1539,8 +1551,7 @@ var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessa
                         this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
-                    "  ", 
-                    React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'me')})
+                    "  "
                 ), 
                 React.createElement("div", {className: "message other-message float-right"}, 
                      this.renderMessage(this.props.data) 
@@ -1602,7 +1613,6 @@ var UnreadIncomingMessage = React.createClass({displayName: "UnreadIncomingMessa
                 React.createElement("span", {className: "mark"}, "New messages"), 
                 React.createElement("div", {className: "message-data"}, 
                     React.createElement("span", {className: "message-data-name"}, 
-                        React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'offline')}), 
                         this.props.data.fromName || 'Not specified', 
                         this._operatorStatus()
                     ), 
@@ -1656,8 +1666,7 @@ var UnreadEndConversationMessage = React.createClass({displayName: "UnreadEndCon
                         this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
-                    "  ", 
-                    React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'me')})
+                    "  "
                 ), 
                  this.renderMessage(this.props.data) 
             )
@@ -1744,8 +1753,7 @@ var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
                         this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
-                    "  ", 
-                    React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'me')})
+                    "  "
                 ), 
                 React.createElement("div", {className: "message other-message float-right"}, 
                      this.renderMessage(this.props.data), 
@@ -2010,7 +2018,6 @@ var IncomingMessage = React.createClass({displayName: "IncomingMessage",
             React.createElement("li", null, 
                 React.createElement("div", {className: "message-data"}, 
                     React.createElement("span", {className: "message-data-name"}, 
-                        React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'offline')}), 
                         this.props.data.fromName || 'Not specified', 
                         this.operatorStatus()
                     ), 
@@ -2344,8 +2351,7 @@ var EndConversationMessage = React.createClass({displayName: "EndConversationMes
                         this.props.data.fromName || 'Empty sender', 
                         this.operatorStatus()
                     ), 
-                    "  ", 
-                    React.createElement("i", {className: "fa fa-circle " + (this.props.status || 'me')})
+                    "  "
                 ), 
 
                  this.renderMessage(this.props.data) 
@@ -2662,6 +2668,10 @@ var ChatBox = React.createClass({displayName: "ChatBox",
     _onSelectContact: function(contact){
         ChatActions.clickContact(contact.name);
         ChatActions.readMessages(contact.name);
+        if(contact.loadStatus == 'init') {
+            var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+            ChatActions.fetchContactHistory(contact, firstMsgId);
+        }
     },
 
     _storeContactSelect: function(){
