@@ -80,6 +80,16 @@ function OkkChatReady(OkkChatApi) {
                     OkkChatApi.Stores.MessageStore.emitUpdate();
                     OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
                     OkkChatApi.Stores.ContactsStore.emitContactSelect();
+                    var unreadIds = OkkChatApi.Stores.MessageStore.getUnreadMessagesIds(response.contact);
+                    if(unreadIds && unreadIds.length){
+                        var unreadedMsgIds = [],
+                            data = {};
+                        for(var i=0; i<unreadIds.length; i++){
+                            unreadedMsgIds.push(+unreadIds[i].replace(/(m_|temp_)/gi, ''))
+                        }
+                        data = {messageIds:unreadedMsgIds};
+                        socket.emit('operator:read:messages', JSON.stringify(data));
+                    }
                     ServerAPI.popQueue(response.contact);
                 }
             });

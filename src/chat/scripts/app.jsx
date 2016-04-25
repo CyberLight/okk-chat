@@ -200,7 +200,8 @@ var CoreUtils = {
             endOfConversation: raw.endOfConversation,
             fullImageUrl: raw.fullImageUrl,
             sending: raw.sending || false,
-            isRead: !!isRead
+            isRead: !!raw.delivered,
+            delivered: !!raw.delivered
         };
 
         return result;
@@ -659,7 +660,8 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
     },
     addContactRawMessages: function(operator, contactId, rawMessages){ //AAA
         var historyMessages = {};
-
+        var unreaded = [];
+        var foundFirstUnread = false;
         for(var i in rawMessages) {
             var rawMessage = rawMessages[i];
             var isRead = true;
@@ -675,10 +677,19 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             );
 
             historyMessages[message.id] = message;
+
+            if(!message.delivered) {
+                if(!foundFirstUnread) {
+                    foundFirstUnread = true;
+                    message.firstUnread = true;
+                }
+                unreaded.push(message.id);
+            }
         }
 
-        MessageStore.addHistoryMessages(contactId, historyMessages);
+        MessageStore.addHistoryMessages(contactId, historyMessages, unreaded);
         MessageStore.emitUpdate();
+        UnreadMessageStore.emitChange();
     },
     getAll: function(){
         return _messages;
@@ -707,17 +718,27 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         return result;
     },
 
-    addHistoryMessages: function(contactId, messagesHash){
-        if(!_messages[contactId]){
+    addHistoryMessages: function(contactId, messagesHash, unreaded){
+        var firstUnreaded = null;
+        var contactMessages = _messages[contactId];
+        if(!contactMessages){
+            if(unreaded && unreaded.length){
+                firstUnreaded = unreaded[0];
+            }
             _messages[contactId] = {
                 messages: messagesHash,
-                unreadIds: [],
-                firstUnreadMsgId: null
+                unreadIds: unreaded || [],
+                firstUnreadMsgId:  firstUnreaded
             }
         }else{
-            _messages[contactId].messages = React.addons.update(
+            if(unreaded && unreaded.length){
+                firstUnreaded = unreaded[0];
+            }
+            contactMessages.firstUnreadMsgId = firstUnreaded;
+            contactMessages.unreadIds = unreaded || [];
+            contactMessages.messages = React.addons.update(
                 messagesHash,
-                {$merge: _messages[contactId].messages}
+                {$merge: contactMessages.messages}
             );
         }
     },
@@ -739,6 +760,16 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         }
 
         _messages[contactId].messages[message.id] = message;
+    },
+
+    getUnreadMessagesIds: function(id){
+        if(!id){
+            return [];
+        }
+        if(!_messages[id]){
+            return [];
+        }
+        return _messages[id].unreadIds;
     },
 
     emitChange: function() {
