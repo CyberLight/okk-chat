@@ -647,6 +647,16 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         var firstKey = keys[0];
         return messages[firstKey].id || null;
     },
+    getLastMessageId: function(contact){
+        var messages = _messages[contact].messages;
+        if (!messages) return null;
+
+        var keys = Object.keys(messages);
+        if (!keys.length) return null;
+
+        var lastKey = keys[keys.length-1];
+        return messages[lastKey].id || null;
+    },
     addContactRawMessages: function(operator, contactId, rawMessages){ //AAA
         var historyMessages = {};
 
@@ -1335,7 +1345,6 @@ var UnreadOutgoingMessage = React.createClass({
                         {this.operatorStatus()}
                     </span>
                     &nbsp;&nbsp;
-                    <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
                 <div className="message other-message float-right">
                     { this.renderMessage(this.props.data) }
@@ -1397,7 +1406,6 @@ var UnreadIncomingMessage = React.createClass({
                 <span className="mark">New messages</span>
                 <div className="message-data">
                     <span className="message-data-name">
-                        <i className={"fa fa-circle " + (this.props.status || 'offline')}></i>
                         {this.props.data.fromName || 'Not specified'}
                         {this._operatorStatus()}
                     </span>
@@ -1452,7 +1460,6 @@ var UnreadEndConversationMessage = React.createClass({
                         {this.operatorStatus()}
                     </span>
                     &nbsp;&nbsp;
-                    <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
                 { this.renderMessage(this.props.data) }
             </li>
@@ -1540,7 +1547,6 @@ var OutgoingMessage = React.createClass({
                         {this.operatorStatus()}
                     </span>
                     &nbsp;&nbsp;
-                    <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
                 <div className="message other-message float-right">
                     { this.renderMessage(this.props.data) }
@@ -1805,7 +1811,6 @@ var IncomingMessage = React.createClass({
             <li>
                 <div className="message-data">
                     <span className="message-data-name">
-                        <i className={"fa fa-circle " + (this.props.status || 'offline')}></i>
                         {this.props.data.fromName || 'Not specified'}
                         {this.operatorStatus()}
                     </span>
@@ -2140,7 +2145,6 @@ var EndConversationMessage = React.createClass({
                         {this.operatorStatus()}
                     </span>
                     &nbsp;&nbsp;
-                    <i className={"fa fa-circle " + (this.props.status || 'me')}></i>
                 </div>
 
                 { this.renderMessage(this.props.data) }
@@ -2457,6 +2461,10 @@ var ChatBox = React.createClass({
     _onSelectContact: function(contact){
         ChatActions.clickContact(contact.name);
         ChatActions.readMessages(contact.name);
+        if(contact.loadStatus == 'init') {
+            var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+            ChatActions.fetchContactHistory(contact, firstMsgId);
+        }
     },
 
     _storeContactSelect: function(){
