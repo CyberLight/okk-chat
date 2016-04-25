@@ -80,6 +80,16 @@ function OkkChatReady(OkkChatApi) {
                     OkkChatApi.Stores.MessageStore.emitUpdate();
                     OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
                     OkkChatApi.Stores.ContactsStore.emitContactSelect();
+                    var unreadIds = OkkChatApi.Stores.MessageStore.getUnreadMessagesIds(response.contact);
+                    if(unreadIds && unreadIds.length){
+                        var unreadedMsgIds = [],
+                            data = {};
+                        for(var i=0; i<unreadIds.length; i++){
+                            unreadedMsgIds.push(+unreadIds[i].replace(/(m_|temp_)/gi, ''))
+                        }
+                        data = {messageIds:unreadedMsgIds};
+                        socket.emit('operator:read:messages', JSON.stringify(data));
+                    }
                     ServerAPI.popQueue(response.contact);
                 }
             });
@@ -183,13 +193,11 @@ function OkkChatReady(OkkChatApi) {
                 ServerAPI.authenticate(action.credentials);
                 break;
             case OkkChatApi.ActionTypes.API_FETCH_CONTACT_HISTORY:
-                setTimeout(function(){
-                    var contactId = action.contact.name;
-                    var added = ServerAPI.pushQueue(contactId);
-                    if(added) {
-                        ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
-                    }
-                }, 3000);
+                var contactId = action.contact.name;
+                var added = ServerAPI.pushQueue(contactId);
+                if(added) {
+                    ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
+                }
                 break;
             case OkkChatApi.ActionTypes.NEW_IN_MESSAGE:
                 IncomingSoundManager.play();
@@ -407,7 +415,8 @@ var CoreUtils = {
             endOfConversation: raw.endOfConversation,
             fullImageUrl: raw.fullImageUrl,
             sending: raw.sending || false,
-            isRead: !!isRead
+            isRead: !!raw.delivered,
+            delivered: !!raw.delivered
         };
 
         return result;
@@ -866,7 +875,8 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
     },
     addContactRawMessages: function(operator, contactId, rawMessages){ //AAA
         var historyMessages = {};
-
+        var unreaded = [];
+        var foundFirstUnread = false;
         for(var i in rawMessages) {
             var rawMessage = rawMessages[i];
             var isRead = true;
@@ -882,10 +892,19 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             );
 
             historyMessages[message.id] = message;
+
+            if(!message.delivered) {
+                if(!foundFirstUnread) {
+                    foundFirstUnread = true;
+                    message.firstUnread = true;
+                }
+                unreaded.push(message.id);
+            }
         }
 
-        MessageStore.addHistoryMessages(contactId, historyMessages);
+        MessageStore.addHistoryMessages(contactId, historyMessages, unreaded);
         MessageStore.emitUpdate();
+        UnreadMessageStore.emitChange();
     },
     getAll: function(){
         return _messages;
@@ -914,17 +933,27 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         return result;
     },
 
-    addHistoryMessages: function(contactId, messagesHash){
-        if(!_messages[contactId]){
+    addHistoryMessages: function(contactId, messagesHash, unreaded){
+        var firstUnreaded = null;
+        var contactMessages = _messages[contactId];
+        if(!contactMessages){
+            if(unreaded && unreaded.length){
+                firstUnreaded = unreaded[0];
+            }
             _messages[contactId] = {
                 messages: messagesHash,
-                unreadIds: [],
-                firstUnreadMsgId: null
+                unreadIds: unreaded || [],
+                firstUnreadMsgId:  firstUnreaded
             }
         }else{
-            _messages[contactId].messages = React.addons.update(
+            if(unreaded && unreaded.length){
+                firstUnreaded = unreaded[0];
+            }
+            contactMessages.firstUnreadMsgId = firstUnreaded;
+            contactMessages.unreadIds = unreaded || [];
+            contactMessages.messages = React.addons.update(
                 messagesHash,
-                {$merge: _messages[contactId].messages}
+                {$merge: contactMessages.messages}
             );
         }
     },
@@ -946,6 +975,16 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         }
 
         _messages[contactId].messages[message.id] = message;
+    },
+
+    getUnreadMessagesIds: function(id){
+        if(!id){
+            return [];
+        }
+        if(!_messages[id]){
+            return [];
+        }
+        return _messages[id].unreadIds;
     },
 
     emitChange: function() {
