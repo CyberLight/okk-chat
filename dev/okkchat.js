@@ -76,11 +76,12 @@ function OkkChatReady(OkkChatApi) {
                 var response = JSON.parse(data);
                 if(response.success) {
                     var operator = OkkChatApi.Stores.AuthStore.getOperator();
-                    OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, response.contact, response.data);
+                    var unreadIds = OkkChatApi.Stores.MessageStore.addContactRawMessages(operator,
+                                                                                         response.contact,
+                                                                                         response.data);
                     OkkChatApi.Stores.MessageStore.emitUpdate();
                     OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
                     OkkChatApi.Stores.ContactsStore.emitContactSelect();
-                    var unreadIds = OkkChatApi.Stores.MessageStore.getUnreadMessagesIds(response.contact);
                     if(unreadIds && unreadIds.length){
                         var unreadedMsgIds = [],
                             data = {};
@@ -108,6 +109,7 @@ function OkkChatReady(OkkChatApi) {
                 if(response.success) {
                     OkkChatApi.Stores.ContactsStore.init(response.data);
                     OkkChatApi.Stores.ContactsStore.emitChange();
+                    OkkChatApi.Stores.MessageStore.init(response.unread)
                 }
             });
         },
@@ -853,6 +855,16 @@ var UnreadMessageStore = objectAssign({}, EventEmitter.prototype, {
 });
 
 var MessageStore = objectAssign({}, EventEmitter.prototype, {
+    init: function(unreadMessages){
+        if(unreadMessages && unreadMessages.length) {
+            for (var j = 0, len = unreadMessages.length; j < len; j++) {
+                var unreadMsg = unreadMessages[j];
+                this.getMessages(unreadMsg.username);
+                _messages[unreadMsg.username].unreadIds = new Array(unreadMsg.unread + 1).join('0').split('');
+            }
+            UnreadMessageStore.emitChange()
+        }
+    },
     getFirstMessageId: function(contact){
         var messages = _messages[contact].messages;
         if (!messages) return null;
@@ -873,7 +885,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         var lastKey = keys[keys.length-1];
         return messages[lastKey].id || null;
     },
-    addContactRawMessages: function(operator, contactId, rawMessages){ //AAA
+    addContactRawMessages: function(operator, contactId, rawMessages){
         var historyMessages = {};
         var unreaded = [];
         var foundFirstUnread = false;
@@ -905,6 +917,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         MessageStore.addHistoryMessages(contactId, historyMessages, unreaded);
         MessageStore.emitUpdate();
         UnreadMessageStore.emitChange();
+        return unreaded;
     },
     getAll: function(){
         return _messages;
@@ -942,7 +955,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             }
             _messages[contactId] = {
                 messages: messagesHash,
-                unreadIds: unreaded || [],
+                unreadIds: [],
                 firstUnreadMsgId:  firstUnreaded
             }
         }else{
@@ -950,7 +963,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
                 firstUnreaded = unreaded[0];
             }
             contactMessages.firstUnreadMsgId = firstUnreaded;
-            contactMessages.unreadIds = unreaded || [];
+            contactMessages.unreadIds = [];
             contactMessages.messages = React.addons.update(
                 messagesHash,
                 {$merge: contactMessages.messages}
@@ -1060,6 +1073,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         }
         var readed = unreadIds.length > 0;
         for(var i = 0, len = unreadIds.length; i < len; i++){
+            if(unreadIds[i] == 0) continue;
             var message = messages[unreadIds[i]];
             if(i == 0){
                 message.firstUnread = true;
