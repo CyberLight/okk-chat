@@ -76,11 +76,12 @@ function OkkChatReady(OkkChatApi) {
                 var response = JSON.parse(data);
                 if(response.success) {
                     var operator = OkkChatApi.Stores.AuthStore.getOperator();
-                    OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, response.contact, response.data);
+                    var unreadIds = OkkChatApi.Stores.MessageStore.addContactRawMessages(operator,
+                                                                                         response.contact,
+                                                                                         response.data);
                     OkkChatApi.Stores.MessageStore.emitUpdate();
                     OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
                     OkkChatApi.Stores.ContactsStore.emitContactSelect();
-                    var unreadIds = OkkChatApi.Stores.MessageStore.getUnreadMessagesIds(response.contact);
                     if(unreadIds && unreadIds.length){
                         var unreadedMsgIds = [],
                             data = {};
@@ -108,6 +109,7 @@ function OkkChatReady(OkkChatApi) {
                 if(response.success) {
                     OkkChatApi.Stores.ContactsStore.init(response.data);
                     OkkChatApi.Stores.ContactsStore.emitChange();
+                    OkkChatApi.Stores.MessageStore.init(response.unread)
                 }
             });
         },
