@@ -38,6 +38,7 @@ function OkkChatReady(OkkChatApi) {
         _accessKey: null,
         _socket: null,
         _updateQueue: [],
+        _needUpdateClientsList: false,
         _connectToSocket: function(){
             var self = this,
                 opts = {
@@ -54,10 +55,15 @@ function OkkChatReady(OkkChatApi) {
                 console.log('connected!!!');
                 self._socket = socket;
                 OkkChatApi.Actions.operatorStatusChanged('online');
+                if(ServerAPI._needUpdateClientsList){
+                    ServerAPI._needUpdateClientsList = false;
+                    ServerAPI.loadContacts();
+                }
             });
 
             socket.on('disconnect', function(){
                 console.log('disconnect!!!');
+                ServerAPI._needUpdateClientsList = true;
                 OkkChatApi.Actions.operatorStatusChanged('offline');
             });
 

@@ -874,11 +874,12 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     init: function(rawContacts){
         for(var i=0, len=rawContacts.length; i<len; i++){
             var rawContact = rawContacts[i];
+            var oldStatus = _contacts[rawContact.username] && _contacts[rawContact.username].loadStatus || 'init';
             _contacts[rawContact.username] = {
                 id: rawContact.id,
                 name: rawContact.username,
                 status: rawContact.status,
-                loadStatus: 'init'
+                loadStatus: oldStatus
             };
         }
     },
