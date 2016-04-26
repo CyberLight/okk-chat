@@ -63,7 +63,9 @@ var ActionTypes = keyMirror({
     CLIENT_STATUS_CHANGED: null,
     OPERATOR_STATUS_CHANGED: null,
     MUTE_NOTIFICATION_SOUND: null,
-    UNMUTE_NOTIFICATION_SOUND: null
+    UNMUTE_NOTIFICATION_SOUND: null,
+    API_FETCH_NEWEST_CONTACT_HISTORY: null,
+    NEWEST_HISTORY_MESSAGES: null
 });
 
 var AuthStatuses = {
@@ -496,6 +498,16 @@ var ChatActions = {
            contact: contact,
            firstMessageId: normalizedMessageId
         });
+    },
+
+    fetchNewestContactHistory: function(contact, firstMessageId){
+        var searchRegex = /m_|temp_/i;
+        var normalizedMessageId = firstMessageId && +((""+firstMessageId).replace(searchRegex, ''));
+        ChatDispatcher.dispatch({
+            type: ActionTypes.API_FETCH_NEWEST_CONTACT_HISTORY,
+            contact: contact,
+            lastMessageId: normalizedMessageId
+        });
     }
 };
 
@@ -668,7 +680,14 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         var lastKey = keys[keys.length-1];
         return messages[lastKey].id || null;
     },
-    addContactRawMessages: function(operator, contactId, rawMessages){
+    getDbMessageId: function(contactId, messageId){
+        var contactData = _messages[contactId];
+        if(contactData && contactData.messages && contactData.messages[messageId]) {
+            return contactData.messages[messageId].id;
+        }
+        return null;
+    },
+    addContactRawMessages: function(operator, contactId, rawMessages, addToEnd){
         var historyMessages = {};
         var unreaded = [];
         var foundFirstUnread = false;
@@ -697,7 +716,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             }
         }
 
-        MessageStore.addHistoryMessages(contactId, historyMessages, unreaded);
+        MessageStore.addHistoryMessages(contactId, historyMessages, unreaded, addToEnd);
         MessageStore.emitUpdate();
         UnreadMessageStore.emitChange();
         return unreaded;
@@ -729,7 +748,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         return result;
     },
 
-    addHistoryMessages: function(contactId, messagesHash, unreaded){
+    addHistoryMessages: function(contactId, messagesHash, unreaded, addToEnd){
         var firstUnreaded = null;
         var contactMessages = _messages[contactId];
         if(!contactMessages){
@@ -747,10 +766,17 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             }
             contactMessages.firstUnreadMsgId = firstUnreaded;
             contactMessages.unreadIds = [];
-            contactMessages.messages = React.addons.update(
-                messagesHash,
-                {$merge: contactMessages.messages}
-            );
+            if(addToEnd){
+                contactMessages.messages = React.addons.update(
+                    contactMessages.messages,
+                    {$merge: messagesHash}
+                );
+            }else {
+                contactMessages.messages = React.addons.update(
+                    messagesHash,
+                    {$merge: contactMessages.messages}
+                );
+            }
         }
     },
 
@@ -2508,6 +2534,9 @@ var ChatBox = React.createClass({
         if(contact.loadStatus == 'init') {
             var firstMsgId = MessageStore.getFirstMessageId(contact.name);
             ChatActions.fetchContactHistory(contact, firstMsgId);
+        }else{
+            var lastMsgId = MessageStore.getLastMessageId(contact.name);
+            ChatActions.fetchNewestContactHistory(contact, lastMsgId);
         }
     },
 

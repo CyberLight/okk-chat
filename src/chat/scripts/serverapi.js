@@ -58,6 +58,7 @@ function OkkChatReady(OkkChatApi) {
                 if(ServerAPI._needUpdateClientsList){
                     ServerAPI._needUpdateClientsList = false;
                     ServerAPI.loadContacts();
+                    ServerAPI.loadNewestMessagesForCurrentContact();
                 }
             });
 
@@ -88,16 +89,11 @@ function OkkChatReady(OkkChatApi) {
                     OkkChatApi.Stores.MessageStore.emitUpdate();
                     OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
                     OkkChatApi.Stores.ContactsStore.emitContactSelect();
-                    if(unreadIds && unreadIds.length){
-                        var unreadedMsgIds = [],
-                            data = {};
-                        for(var i=0; i<unreadIds.length; i++){
-                            unreadedMsgIds.push(+unreadIds[i].replace(/(m_|temp_)/gi, ''))
-                        }
-                        data = {messageIds:unreadedMsgIds};
+                    ServerAPI.popQueue(response.contact);
+                    var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+                    if(data.messageIds.length) {
                         socket.emit('operator:read:messages', JSON.stringify(data));
                     }
-                    ServerAPI.popQueue(response.contact);
                 }
             });
 
@@ -163,6 +159,16 @@ function OkkChatReady(OkkChatApi) {
         loadContacts: function () {
             this._socket.emit('client:list');
         },
+        loadNewestMessagesForCurrentContact: function(){
+            var contact =  OkkChatApi.Stores.ContactsStore.getCurrentContact();
+            if(contact) {
+                var lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
+                var messageId = OkkChatApi.Stores.MessageStore.getDbMessageId(contact.name, lastMsgId);
+                if(messageId) {
+                    ChatActions.fetchNewestContactHistory(contact, messageId);
+                }
+            }
+        },
         loadRawContactMessages: function (contactId, firstMsgId) {
             var queryData = {mobile: contactId};
             if (firstMsgId){
@@ -171,9 +177,42 @@ function OkkChatReady(OkkChatApi) {
 
             this._socket.emit('operator:message:history', JSON.stringify(queryData));
         },
+        loadNewestRawContactMessages: function (contactId, lastMsgId) {
+            var queryData = {mobile: contactId};
+            if (lastMsgId){
+                queryData['lastMessageId'] = lastMsgId;
+            }
+
+            this._socket.emit('operator:newest:message:history', JSON.stringify(queryData), function(jsonData){
+                var history = JSON.parse(jsonData);
+                var data = history.data;
+                var unreadIds = [];
+                var operator = OkkChatApi.Stores.AuthStore.getOperator();
+                for(var i=0, len=history.data.length; i<len; i++){
+                    var message = history.data[i];
+                    unreadIds.push(message.id);
+                }
+                OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, data, true);
+                var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+                if(data.messageIds.length) {
+                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data));
+                }
+                ServerAPI.popQueue(history.contact);
+            });
+        },
         sendMessageToServer: function(msg){
             this._updateQueue.push({to: msg.receiver, tempMessageId: msg.id });
             this._socket.emit('operator:message', JSON.stringify(msg))
+        },
+        getNormalizedUnreadIds: function(unreadIds){
+            if(unreadIds && unreadIds.length){
+                var unreadedMsgIds = [];
+                for(var i=0; i<unreadIds.length; i++){
+                    unreadedMsgIds.push(+unreadIds[i].replace(/(m_|temp_)/gi, ''))
+                }
+                return {messageIds:unreadedMsgIds};
+            }
+            return {messageIds:[]};
         }
     });
 
@@ -205,6 +244,13 @@ function OkkChatReady(OkkChatApi) {
                 var added = ServerAPI.pushQueue(contactId);
                 if(added) {
                     ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
+                }
+                break;
+            case OkkChatApi.ActionTypes.API_FETCH_NEWEST_CONTACT_HISTORY:
+                var contactId = action.contact.name;
+                var added = ServerAPI.pushQueue(contactId);
+                if(added) {
+                    ServerAPI.loadNewestRawContactMessages(contactId, action.lastMessageId);
                 }
                 break;
             case OkkChatApi.ActionTypes.NEW_IN_MESSAGE:
