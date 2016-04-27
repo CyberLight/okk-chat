@@ -163,9 +163,8 @@ function OkkChatReady(OkkChatApi) {
             var contact =  OkkChatApi.Stores.ContactsStore.getCurrentContact();
             if(contact) {
                 var lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
-                var messageId = OkkChatApi.Stores.MessageStore.getDbMessageId(contact.name, lastMsgId);
-                if(messageId) {
-                    ChatActions.fetchNewestContactHistory(contact, messageId);
+                if(lastMsgId) {
+                    ChatActions.fetchNewestContactHistory(contact, lastMsgId);
                 }
             }
         },

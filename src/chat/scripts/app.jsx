@@ -198,7 +198,7 @@ var CoreUtils = {
             contentType: raw.contentType,
             messageType: raw.messageType,
             operator: raw.operator,
-            date: raw.date,
+            date: new Date(raw.date),
             endOfConversation: raw.endOfConversation,
             fullImageUrl: raw.fullImageUrl,
             sending: raw.sending || false,
@@ -690,7 +690,6 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
     addContactRawMessages: function(operator, contactId, rawMessages, addToEnd){
         var historyMessages = {};
         var unreaded = [];
-        var foundFirstUnread = false;
         for(var i in rawMessages) {
             var rawMessage = rawMessages[i];
             var isRead = true;
@@ -708,10 +707,6 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             historyMessages[message.id] = message;
 
             if(!message.delivered) {
-                if(!foundFirstUnread) {
-                    foundFirstUnread = true;
-                    message.firstUnread = true;
-                }
                 unreaded.push(message.id);
             }
         }
@@ -748,10 +743,18 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         return result;
     },
 
+    getFirstUnreadId: function(id){
+        if(!id){
+            return null;
+        }
+
+        return _messages[id].firstUnreadMsgId;
+    },
+
     addHistoryMessages: function(contactId, messagesHash, unreaded, addToEnd){
         var firstUnreaded = null;
-        var contactMessages = _messages[contactId];
-        if(!contactMessages){
+        var messagesInfo = _messages[contactId];
+        if(!messagesInfo){
             if(unreaded && unreaded.length){
                 firstUnreaded = unreaded[0];
             }
@@ -763,18 +766,21 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         }else{
             if(unreaded && unreaded.length){
                 firstUnreaded = unreaded[0];
+                if(!messagesInfo.firstUnreadMsgId) {
+                    messagesInfo.firstUnreadMsgId = firstUnreaded;
+                }
+                messagesInfo.unreadIds = unreaded;
             }
-            contactMessages.firstUnreadMsgId = firstUnreaded;
-            contactMessages.unreadIds = [];
+
             if(addToEnd){
-                contactMessages.messages = React.addons.update(
-                    contactMessages.messages,
+                messagesInfo.messages = React.addons.update(
+                    messagesInfo.messages,
                     {$merge: messagesHash}
                 );
             }else {
-                contactMessages.messages = React.addons.update(
+                messagesInfo.messages = React.addons.update(
                     messagesHash,
-                    {$merge: contactMessages.messages}
+                    {$merge: messagesInfo.messages}
                 );
             }
         }
@@ -789,13 +795,14 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
                 firstUnreadMsgId: null
             }
         }
-        if(!message.isRead){
-            _messages[contactId].unreadIds.push(message.id);
-            if(_messages[contactId].firstUnreadMsgId == null){
-                _messages[contactId].firstUnreadMsgId = message.id;
-            }
+
+        if(activeId == contactId || !_messages[contactId].firstUnreadMsgId) {
+            _messages[contactId].firstUnreadMsgId = message.id;
         }
 
+        if(!message.isRead){
+            _messages[contactId].unreadIds.push(message.id);
+        }
         _messages[contactId].messages[message.id] = message;
     },
 
@@ -864,30 +871,14 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         this.emitChange();
     },
 
-    unmarkFirstRead: function(id){
-        if(id) {
-            var msgId = _messages[id].firstUnreadMsgId;
-            if (msgId != null) {
-                _messages[id].messages[msgId].firstUnread = false;
-            }
-        }
-    },
     readMessages: function(id){
         var messages = _messages[id].messages;
         var unreadIds = _messages[id].unreadIds || (_messages[id].unreadIds = []);
 
-        var firstUnreadMsgId = _messages[id].firstUnreadMsgId;
-        if(firstUnreadMsgId){
-            messages[firstUnreadMsgId].firstUnread = false;
-        }
         var readed = unreadIds.length > 0;
         for(var i = 0, len = unreadIds.length; i < len; i++){
             if(unreadIds[i] == 0) continue;
             var message = messages[unreadIds[i]];
-            if(i == 0){
-                message.firstUnread = true;
-                _messages[id].firstUnreadMsgId = message.id;
-            }
             message.isRead = true;
         }
 
@@ -1109,12 +1100,14 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 
     var message = null;
     var activeContactId;
-    var unreadIndex = -1;
 
     switch(action.type) {
         case ActionTypes.CLICK_CONTACT:
             if(action.changed) {
-                MessageStore.unmarkFirstRead(action.prevContactId);
+                if(_messages[action.prevContactId]) {
+                    _messages[action.prevContactId].firstUnreadMsgId = null;
+                    _preActiveContactId = _activeContactId;
+                }
                 MessageStore.emitUpdate();
             }
             break;
@@ -1144,13 +1137,6 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             break;
 
         case ActionTypes.CONTACT_FILTER:
-            if(_preActiveContactId) {
-                unreadIndex = _messages[_preActiveContactId].firstUnreadMsgId;
-                if(unreadIndex != null) {
-                    _messages[_preActiveContactId].messages[unreadIndex].firstUnread = false;
-                    _messages[_preActiveContactId].firstUnreadMsgId = null;
-                }
-            }
             break;
         case ActionTypes.UPDATE_MESSAGE_CONTENT:
             var payload = action.payload;
@@ -1952,11 +1938,11 @@ var HistoryButton = React.createClass({
 var HistoryBox = React.createClass({
     scroll: 0,
     canScroll: true,
-    renderMessage: function(message){
+    renderMessage: function(message, firstUnreadMsgId){
         var contact = this.props.contact;
         switch(message.messageType){
             case MessageTypes.INCOMING:
-                if(message.firstUnread){
+                if(message.id == firstUnreadMsgId){
                     if(message.endOfConversation) {
                         return (
                             <UnreadEndConversationMessage key={message.id}
@@ -1987,7 +1973,7 @@ var HistoryBox = React.createClass({
                     );
                 }
             case MessageTypes.OUTGOING:
-                if(message.firstUnread){
+                if(message.id == firstUnreadMsgId){
                     if(message.endOfConversation) {
                         return (
                             <UnreadEndConversationMessage key={message.id}
@@ -2050,6 +2036,7 @@ var HistoryBox = React.createClass({
     },
     render: function() {
         var renderMessage = this.renderMessage;
+        var firstUnreadMsgId = this.props.firstUnreadMsgId;
         return (
             <div className="chat-history">
                 <LoadMessageHistoryButton status={this.props.contact.loadStatus}
@@ -2060,7 +2047,7 @@ var HistoryBox = React.createClass({
                 <ul className="chat-history-messages">
                     {
                         this.props.messages.map(function(message){
-                            return renderMessage(message)
+                            return renderMessage(message, firstUnreadMsgId)
                         })
                     }
                 </ul>
@@ -2293,7 +2280,9 @@ var ConversationBox = React.createClass({
                 <HeaderBox contact={this.props.contact} count={this.props.messages.length}
                            onClose={this._onClose}
                            onMinimize={this._onMinimize}/>
-                <HistoryBox contact={this.props.contact} messages={this.props.messages}
+                <HistoryBox contact={this.props.contact}
+                            firstUnreadMsgId={this.props.firstUnreadMsgId}
+                            messages={this.props.messages}
                             onLoadHistory={this._onLoadHistory}/>
                 <FooterBox operator={this.props.operator} contact={this.props.contact} onMessage={this._onOutMessage}/>
             </div>
@@ -2555,6 +2544,7 @@ var ChatBox = React.createClass({
             chatState: currentContact ? 'chat' : 'no-chat',
             currentContact: currentContact,
             messages: MessageStore.getMessages(name),
+            firstUnreadMsgId: MessageStore.getFirstUnreadId(name),
             contacts: ContactsStore.getAll()
         });
     },
@@ -2564,7 +2554,8 @@ var ChatBox = React.createClass({
         if(currentContact) {
             this.setState({
                 currentContact: currentContact,
-                messages: MessageStore.getMessages(currentContact.name)
+                messages: MessageStore.getMessages(currentContact.name),
+                firstUnreadMsgId: MessageStore.getFirstUnreadId(currentContact.name)
             });
         }
     },
@@ -2634,6 +2625,7 @@ var ChatBox = React.createClass({
                         <ConversationBox contact={this.state.currentContact}
                                          operator={this.state.operator}
                                          messages={this.state.messages}
+                                         firstUnreadMsgId={this.state.firstUnreadMsgId}
                                          onClose={this.onConversationClose}
                                          onMinimize={this._onMinimize}
                                          onOutgoingMessage={this.onOutgoingMessage}
