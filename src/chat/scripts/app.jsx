@@ -796,7 +796,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             }
         }
 
-        if(activeId == contactId || !_messages[contactId].firstUnreadMsgId) {
+        if(message.messageType != MessageTypes.OUTGOING && !_messages[contactId].firstUnreadMsgId) {
             _messages[contactId].firstUnreadMsgId = message.id;
         }
 
