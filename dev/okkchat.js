@@ -38,7 +38,7 @@ function OkkChatReady(OkkChatApi) {
         _accessKey: null,
         _socket: null,
         _updateQueue: [],
-        _needUpdateClientsList: false,
+        _firstConnection: true,
         _connectToSocket: function(){
             var self = this,
                 opts = {
@@ -55,11 +55,11 @@ function OkkChatReady(OkkChatApi) {
                 console.log('connected!!!');
                 self._socket = socket;
                 OkkChatApi.Actions.operatorStatusChanged('online');
-                if(ServerAPI._needUpdateClientsList){
-                    ServerAPI._needUpdateClientsList = false;
+                if(!ServerAPI._firstConnection){
                     ServerAPI.loadContacts();
                     ServerAPI.loadNewestMessagesForCurrentContact();
                 }
+                ServerAPI._firstConnection = false;
             });
 
             socket.on('disconnect', function(){
@@ -160,11 +160,13 @@ function OkkChatReady(OkkChatApi) {
             this._socket.emit('client:list');
         },
         loadNewestMessagesForCurrentContact: function(){
+            var searchRegex = /m_|temp_/i;
             var contact =  OkkChatApi.Stores.ContactsStore.getCurrentContact();
             if(contact) {
                 var lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
+                var normalizedMessageId = +((""+lastMsgId).replace(searchRegex, ''));
                 if(lastMsgId) {
-                    ChatActions.fetchNewestContactHistory(contact, lastMsgId);
+                    ServerAPI.loadNewestRawContactMessages(contact.name, normalizedMessageId);
                 }
             }
         },
@@ -1064,7 +1066,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             }
         }
 
-        if(activeId == contactId || !_messages[contactId].firstUnreadMsgId) {
+        if(message.messageType != MessageTypes.OUTGOING && !_messages[contactId].firstUnreadMsgId) {
             _messages[contactId].firstUnreadMsgId = message.id;
         }
 
