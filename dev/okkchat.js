@@ -37,7 +37,6 @@ function OkkChatReady(OkkChatApi) {
         _loadQueue: {},
         _accessKey: null,
         _socket: null,
-        _updateQueue: [],
         _firstConnection: true,
         _connectToSocket: function(){
             var self = this,
@@ -66,6 +65,7 @@ function OkkChatReady(OkkChatApi) {
                 console.log('disconnect!!!');
                 ServerAPI._needUpdateClientsList = true;
                 OkkChatApi.Actions.operatorStatusChanged('offline');
+                OkkChatApi.Stores.ContactsStore.makeAllOffline();
             });
 
             socket.on('incoming:message', function (response) {
@@ -73,29 +73,6 @@ function OkkChatReady(OkkChatApi) {
                 OkkChatApi.Actions.incomingMessage(message)
             });
 
-            socket.on('operator:message', function (response) {
-                var res = JSON.parse(response);
-                var item = this._updateQueue.shift();
-                OkkChatApi.Actions.updateMessageContent(item.to, item.tempMessageId, res);
-            }.bind(this));
-
-            socket.on('operator:message:history', function(data) {
-                var response = JSON.parse(data);
-                if(response.success) {
-                    var operator = OkkChatApi.Stores.AuthStore.getOperator();
-                    var unreadIds = OkkChatApi.Stores.MessageStore.addContactRawMessages(operator,
-                                                                                         response.contact,
-                                                                                         response.data);
-                    OkkChatApi.Stores.MessageStore.emitUpdate();
-                    OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
-                    OkkChatApi.Stores.ContactsStore.emitContactSelect();
-                    ServerAPI.popQueue(response.contact);
-                    var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
-                    if(data.messageIds.length) {
-                        socket.emit('operator:read:messages', JSON.stringify(data));
-                    }
-                }
-            });
 
             socket.on('client:status', function (data) {
                 var client = JSON.parse(data);
@@ -104,15 +81,6 @@ function OkkChatReady(OkkChatApi) {
 
             socket.on('client:new', function (response) {
 
-            });
-
-            socket.on('client:list', function (jsonResponse) {
-                var response = JSON.parse(jsonResponse);
-                if(response.success) {
-                    OkkChatApi.Stores.ContactsStore.init(response.data);
-                    OkkChatApi.Stores.ContactsStore.emitChange();
-                    OkkChatApi.Stores.MessageStore.init(response.unread)
-                }
             });
         },
         pushQueue: function(contactId){
@@ -157,16 +125,39 @@ function OkkChatReady(OkkChatApi) {
             });
         },
         loadContacts: function () {
-            this._socket.emit('client:list');
+            this._socket.emit('client:list', {}, function (jsonResponse) {
+                var response = JSON.parse(jsonResponse);
+                if(response.success) {
+                    OkkChatApi.Stores.ContactsStore.init(response.data);
+                    OkkChatApi.Stores.ContactsStore.emitChange();
+                    OkkChatApi.Stores.MessageStore.init(response.unread)
+                }
+            });
         },
         loadNewestMessagesForCurrentContact: function(){
-            var searchRegex = /m_|temp_/i;
+            var searchRegex = /m_/i;
             var contact =  OkkChatApi.Stores.ContactsStore.getCurrentContact();
             if(contact) {
                 var lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
-                var normalizedMessageId = +((""+lastMsgId).replace(searchRegex, ''));
-                if(lastMsgId) {
+                var strLastMsgId = (""+lastMsgId);
+                var normalizedMessageId = +(strLastMsgId.replace(searchRegex, ''));
+                var submitted = strLastMsgId.indexOf('temp_') == -1;
+                if(submitted && lastMsgId) {
                     ServerAPI.loadNewestRawContactMessages(contact.name, normalizedMessageId);
+                }else{
+                    (function() {
+                        var intervalId = setInterval(function () {
+                            var msg = OkkChatApi.Stores.MessageStore.getMessage(this.contact.name, this.lastMsgId);
+                            if(!msg){
+                                clearInterval(intervalId);
+                            }
+                            if(msg && (""+msg.id).indexOf('temp_') == -1){
+                                clearInterval(intervalId);
+                                OkkChatApi.Stores.MessageStore.clearMessages(this.contact.name);
+                                ServerAPI.loadRawContactMessages(contact.name, null);
+                            }
+                        }.bind({contact: contact, lastMsgId: lastMsgId}), 1000);
+                    })()
                 }
             }
         },
@@ -176,7 +167,24 @@ function OkkChatReady(OkkChatApi) {
                 queryData['firstMessageId'] = firstMsgId;
             }
 
-            this._socket.emit('operator:message:history', JSON.stringify(queryData));
+            this._socket.emit('operator:message:history', JSON.stringify(queryData), function(data){
+                var response = JSON.parse(data);
+                if(response.success) {
+                    var operator = OkkChatApi.Stores.AuthStore.getOperator();
+                    var unreadIds = OkkChatApi.Stores.MessageStore.addContactRawMessages(operator,
+                        response.contact,
+                        response.data);
+                    OkkChatApi.Stores.MessageStore.emitUpdate();
+                    OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
+                    OkkChatApi.Stores.ContactsStore.emitContactSelect();
+                    ServerAPI.popQueue(response.contact);
+                    var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+                    if(data.messageIds.length) {
+                        this._socket.emit('operator:read:messages', JSON.stringify(data), function(data){
+                        });
+                    }
+                }
+            }.bind(this));
         },
         loadNewestRawContactMessages: function (contactId, lastMsgId) {
             var queryData = {mobile: contactId};
@@ -196,20 +204,23 @@ function OkkChatReady(OkkChatApi) {
                 OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, data, true);
                 var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
                 if(data.messageIds.length) {
-                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data));
+                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){
+                    });
                 }
                 ServerAPI.popQueue(history.contact);
             });
         },
         sendMessageToServer: function(msg){
-            this._updateQueue.push({to: msg.receiver, tempMessageId: msg.id });
-            this._socket.emit('operator:message', JSON.stringify(msg))
+            this._socket.emit('operator:message', JSON.stringify(msg), function(response){
+                 var res = JSON.parse(response);
+                 OkkChatApi.Actions.updateMessageContent(this.receiver, res.temp_id, res);
+            }.bind(msg));
         },
         getNormalizedUnreadIds: function(unreadIds){
             if(unreadIds && unreadIds.length){
                 var unreadedMsgIds = [];
                 for(var i=0; i<unreadIds.length; i++){
-                    unreadedMsgIds.push(+unreadIds[i].replace(/(m_|temp_)/gi, ''))
+                    unreadedMsgIds.push(+unreadIds[i].replace(/m_/gi, ''))
                 }
                 return {messageIds:unreadedMsgIds};
             }
@@ -1154,6 +1165,15 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
 
         _messages[id].unreadIds = [];
         return readed;
+    },
+    clearMessages: function(contactId){
+        _messages[contactId].messages = [];
+    },
+    getMessage: function(contactId, messageId){
+        if(_messages[contactId] && _messages[contactId].messages) {
+            return _messages[contactId].messages[messageId];
+        }
+        return null;
     }
 });
 
@@ -1263,6 +1283,15 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     },
     setLoadedState: function(contactId){
         _contacts[contactId].loadStatus = 'loaded';
+    },
+    makeAllOffline: function(){
+        var keys = Object.keys(_contacts);
+        if(keys.length > 0){
+            for(var i=0, len=keys.length; i<len; i++){
+                _contacts[keys[i]].status = 'offline';
+            }
+        }
+        this.emitChange();
     }
 });
 
@@ -1605,18 +1634,25 @@ var UploadImageButton = React.createClass({displayName: "UploadImageButton",
         fr.readAsDataURL(file);
     },
     render: function() {
-        return (
-            React.createElement("i", {className: this.props.classes, style: { position: 'relative'}}, 
-                React.createElement("form", {action: "#"}, 
-                    React.createElement("input", {style: { opacity: 0, zIndex: 2, left: 0, top: 0, width: '100%', position: 'absolute'}, 
-                           ref: "fileUpload", 
-                           type: "file", 
-                           accept: "image/*", 
-                           onChange: this._onFileChange})
-                ), 
-                React.createElement("canvas", {ref: "imageCanvas", style: { display: 'none'}})
-            )
-        );
+        if(this.props.btnEnabled) {
+            return (
+                React.createElement("i", {className: this.props.classes, style: { position: 'relative'}}, 
+                    React.createElement("form", {action: "#"}, 
+                        React.createElement("input", {style: { opacity: 0, zIndex: 2, left: 0, top: 0, width: '100%', position: 'absolute'}, 
+                               ref: "fileUpload", 
+                               type: "file", 
+                               accept: "image/*", 
+                               onChange: this._onFileChange})
+                    ), 
+                    React.createElement("canvas", {ref: "imageCanvas", style: { display: 'none'}})
+                )
+            );
+        } else {
+            return (
+                React.createElement("i", {className: this.props.classes, style: { position: 'relative'}}
+                )
+            );
+        }
     }
 });
 
@@ -2195,12 +2231,21 @@ var IconButton = React.createClass({displayName: "IconButton",
 
 var HistoryButton = React.createClass({displayName: "HistoryButton",
     render: function() {
-        return (
-            React.createElement("button", {onClick: this.props.onClick, className: this.props.classes}, 
-                React.createElement("i", {className: this.props.icons}), 
-                "  ", this.props.title || ''
-            )
-        );
+        if(this.props.btnEnabled) {
+            return (
+                React.createElement("button", {onClick: this.props.onClick, className: this.props.classes}, 
+                    React.createElement("i", {className: this.props.icons}), 
+                    "  ", this.props.title || ''
+                )
+            );
+        }else{
+            return (
+                React.createElement("button", {disabled: "disabled", className: this.props.classes}, 
+                    React.createElement("i", {className: this.props.icons}), 
+                    "  ", this.props.title || ''
+                )
+            );
+        }
     }
 });
 
@@ -2304,15 +2349,24 @@ var HistoryBox = React.createClass({displayName: "HistoryBox",
     componentDidUpdate: function() {
         this._scrollToFirstUnread();
     },
+    _renderLoadHistoryButton: function(){
+        if(this.props.operator.status == 'online') {
+            return (
+                React.createElement(LoadMessageHistoryButton, {status: this.props.contact.loadStatus, 
+                                          onClick: this._onLoadHistory, 
+                                          title: "Load history", 
+                                          titleLoading: "Loading..."})
+            );
+        }else{
+            return null;
+        }
+    },
     render: function() {
         var renderMessage = this.renderMessage;
         var firstUnreadMsgId = this.props.firstUnreadMsgId;
         return (
             React.createElement("div", {className: "chat-history"}, 
-                React.createElement(LoadMessageHistoryButton, {status: this.props.contact.loadStatus, 
-                                          onClick: this._onLoadHistory, 
-                                          title: "Load history", 
-                                          titleLoading: "Loading..."}), 
+                this._renderLoadHistoryButton(), 
 
                 React.createElement("ul", {className: "chat-history-messages"}, 
                     
@@ -2425,20 +2479,45 @@ var FooterBox = React.createClass({displayName: "FooterBox",
         };
         ChatActions.outgoingMessage(msg);
     },
-    render: function() {
-        return (
-            React.createElement("div", {className: "chat-message clearfix"}, 
+    _operatorOnline: function(){
+        return this.props.operator.status == 'online';
+    },
+    _getTextArea: function(){
+        if(this._operatorOnline()) {
+            return (
                 React.createElement("textarea", {name: "message-to-send", 
                           id: "message-to-send", 
                           placeholder: "Type your message", 
                           value: this.state.value, 
                           onChange: this.handleChange, 
                           onKeyUp: this.handleKeyUp, 
-                          rows: "2"}), 
-                React.createElement(IconButton, {classes: "fa fa-file-o"}), "   ", 
-                React.createElement(UploadImageButton, {onImageBase64: this._onImageUpload, classes: "fa fa-file-image-o"}), 
-                React.createElement(HistoryButton, {onClick: this.sendMessage, title: "send", icons: "fa fa-paper-plane-o", classes: "btn-send"}), 
-                React.createElement(HistoryButton, {onClick: this.sendEndMessage, title: "end", icons: "fa fa-comments", classes: "btn-replied"})
+                          rows: "2"})
+            );
+        }
+        return (
+            React.createElement("textarea", {disabled: "disabled", 
+                      name: "message-to-send", 
+                      id: "message-to-send", 
+                      placeholder: "Type your message", 
+                      value: this.state.value, 
+                      rows: "2"})
+        );
+    },
+    render: function() {
+        return (
+            React.createElement("div", {className: "chat-message clearfix"}, 
+                this._getTextArea(), 
+                React.createElement(IconButton, {btnEnabled: this._operatorOnline(), 
+                            classes: "fa fa-file-o"}), "   ", 
+                React.createElement(UploadImageButton, {btnEnabled: this._operatorOnline(), 
+                                   onImageBase64: this._onImageUpload, 
+                                   classes: "fa fa-file-image-o"}), 
+                React.createElement(HistoryButton, {btnEnabled: this._operatorOnline(), 
+                               onClick: this.sendMessage, 
+                               title: "send", icons: "fa fa-paper-plane-o", classes: "btn-send"}), 
+                React.createElement(HistoryButton, {btnEnabled: this._operatorOnline(), 
+                               onClick: this.sendEndMessage, 
+                               title: "end", icons: "fa fa-comments", classes: "btn-replied"})
             )
         );
     }
@@ -2547,14 +2626,18 @@ var ConversationBox = React.createClass({displayName: "ConversationBox",
     render: function() {
         return (
             React.createElement("div", {className: "chat"}, 
-                React.createElement(HeaderBox, {contact: this.props.contact, count: this.props.messages.length, 
+                React.createElement(HeaderBox, {contact: this.props.contact, 
+                           count: this.props.messages.length, 
                            onClose: this._onClose, 
                            onMinimize: this._onMinimize}), 
                 React.createElement(HistoryBox, {contact: this.props.contact, 
+                            operator: this.props.operator, 
                             firstUnreadMsgId: this.props.firstUnreadMsgId, 
                             messages: this.props.messages, 
                             onLoadHistory: this._onLoadHistory}), 
-                React.createElement(FooterBox, {operator: this.props.operator, contact: this.props.contact, onMessage: this._onOutMessage})
+                React.createElement(FooterBox, {operator: this.props.operator, 
+                           contact: this.props.contact, 
+                           onMessage: this._onOutMessage})
             )
         );
     }
@@ -2790,12 +2873,14 @@ var ChatBox = React.createClass({displayName: "ChatBox",
     _onSelectContact: function(contact){
         ChatActions.clickContact(contact.name);
         ChatActions.readMessages(contact.name);
-        if(contact.loadStatus == 'init') {
-            var firstMsgId = MessageStore.getFirstMessageId(contact.name);
-            ChatActions.fetchContactHistory(contact, firstMsgId);
-        }else{
-            var lastMsgId = MessageStore.getLastMessageId(contact.name);
-            ChatActions.fetchNewestContactHistory(contact, lastMsgId);
+        if(this.state.operator.status == 'online') {
+            if (contact.loadStatus == 'init') {
+                var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+                ChatActions.fetchContactHistory(contact, firstMsgId);
+            } else {
+                var lastMsgId = MessageStore.getLastMessageId(contact.name);
+                ChatActions.fetchNewestContactHistory(contact, lastMsgId);
+            }
         }
     },
 
