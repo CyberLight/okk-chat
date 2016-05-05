@@ -37,7 +37,6 @@ function OkkChatReady(OkkChatApi) {
         _loadQueue: {},
         _accessKey: null,
         _socket: null,
-        _updateQueue: [],
         _firstConnection: true,
         _connectToSocket: function(){
             var self = this,
@@ -73,29 +72,6 @@ function OkkChatReady(OkkChatApi) {
                 OkkChatApi.Actions.incomingMessage(message)
             });
 
-            socket.on('operator:message', function (response) {
-                var res = JSON.parse(response);
-                var item = this._updateQueue.shift();
-                OkkChatApi.Actions.updateMessageContent(item.to, item.tempMessageId, res);
-            }.bind(this));
-
-            socket.on('operator:message:history', function(data) {
-                var response = JSON.parse(data);
-                if(response.success) {
-                    var operator = OkkChatApi.Stores.AuthStore.getOperator();
-                    var unreadIds = OkkChatApi.Stores.MessageStore.addContactRawMessages(operator,
-                                                                                         response.contact,
-                                                                                         response.data);
-                    OkkChatApi.Stores.MessageStore.emitUpdate();
-                    OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
-                    OkkChatApi.Stores.ContactsStore.emitContactSelect();
-                    ServerAPI.popQueue(response.contact);
-                    var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
-                    if(data.messageIds.length) {
-                        socket.emit('operator:read:messages', JSON.stringify(data));
-                    }
-                }
-            });
 
             socket.on('client:status', function (data) {
                 var client = JSON.parse(data);
@@ -104,15 +80,6 @@ function OkkChatReady(OkkChatApi) {
 
             socket.on('client:new', function (response) {
 
-            });
-
-            socket.on('client:list', function (jsonResponse) {
-                var response = JSON.parse(jsonResponse);
-                if(response.success) {
-                    OkkChatApi.Stores.ContactsStore.init(response.data);
-                    OkkChatApi.Stores.ContactsStore.emitChange();
-                    OkkChatApi.Stores.MessageStore.init(response.unread)
-                }
             });
         },
         pushQueue: function(contactId){
@@ -157,7 +124,14 @@ function OkkChatReady(OkkChatApi) {
             });
         },
         loadContacts: function () {
-            this._socket.emit('client:list');
+            this._socket.emit('client:list', {}, function (jsonResponse) {
+                var response = JSON.parse(jsonResponse);
+                if(response.success) {
+                    OkkChatApi.Stores.ContactsStore.init(response.data);
+                    OkkChatApi.Stores.ContactsStore.emitChange();
+                    OkkChatApi.Stores.MessageStore.init(response.unread)
+                }
+            });
         },
         loadNewestMessagesForCurrentContact: function(){
             var searchRegex = /m_|temp_/i;
@@ -176,7 +150,24 @@ function OkkChatReady(OkkChatApi) {
                 queryData['firstMessageId'] = firstMsgId;
             }
 
-            this._socket.emit('operator:message:history', JSON.stringify(queryData));
+            this._socket.emit('operator:message:history', JSON.stringify(queryData), function(data){
+                var response = JSON.parse(data);
+                if(response.success) {
+                    var operator = OkkChatApi.Stores.AuthStore.getOperator();
+                    var unreadIds = OkkChatApi.Stores.MessageStore.addContactRawMessages(operator,
+                        response.contact,
+                        response.data);
+                    OkkChatApi.Stores.MessageStore.emitUpdate();
+                    OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
+                    OkkChatApi.Stores.ContactsStore.emitContactSelect();
+                    ServerAPI.popQueue(response.contact);
+                    var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+                    if(data.messageIds.length) {
+                        this._socket.emit('operator:read:messages', JSON.stringify(data), function(data){
+                        });
+                    }
+                }
+            }.bind(this));
         },
         loadNewestRawContactMessages: function (contactId, lastMsgId) {
             var queryData = {mobile: contactId};
@@ -196,14 +187,17 @@ function OkkChatReady(OkkChatApi) {
                 OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, data, true);
                 var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
                 if(data.messageIds.length) {
-                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data));
+                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){
+                    });
                 }
                 ServerAPI.popQueue(history.contact);
             });
         },
         sendMessageToServer: function(msg){
-            this._updateQueue.push({to: msg.receiver, tempMessageId: msg.id });
-            this._socket.emit('operator:message', JSON.stringify(msg))
+            this._socket.emit('operator:message', JSON.stringify(msg), function(response){
+                 var res = JSON.parse(response);
+                 OkkChatApi.Actions.updateMessageContent(this.receiver, res.temp_id, res);
+            }.bind(msg));
         },
         getNormalizedUnreadIds: function(unreadIds){
             if(unreadIds && unreadIds.length){
