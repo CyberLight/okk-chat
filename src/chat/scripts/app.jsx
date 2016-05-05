@@ -884,6 +884,15 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
 
         _messages[id].unreadIds = [];
         return readed;
+    },
+    clearMessages: function(contactId){
+        _messages[contactId].messages = [];
+    },
+    getMessage: function(contactId, messageId){
+        if(_messages[contactId] && _messages[contactId].messages) {
+            return _messages[contactId].messages[messageId];
+        }
+        return null;
     }
 });
 
@@ -993,6 +1002,15 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     },
     setLoadedState: function(contactId){
         _contacts[contactId].loadStatus = 'loaded';
+    },
+    makeAllOffline: function(){
+        var keys = Object.keys(_contacts);
+        if(keys.length > 0){
+            for(var i=0, len=keys.length; i<len; i++){
+                _contacts[keys[i]].status = 'offline';
+            }
+        }
+        this.emitChange();
     }
 });
 
@@ -1335,18 +1353,25 @@ var UploadImageButton = React.createClass({
         fr.readAsDataURL(file);
     },
     render: function() {
-        return (
-            <i className={this.props.classes} style={{ position: 'relative'  }}>
-                <form action='#'>
-                    <input style={{ opacity: 0, zIndex: 2, left: 0, top: 0, width: '100%', position: 'absolute' }}
-                           ref="fileUpload"
-                           type="file"
-                           accept="image/*"
-                           onChange={this._onFileChange}/>
-                </form>
-                <canvas ref="imageCanvas" style={{ display: 'none' }}></canvas>
-            </i>
-        );
+        if(this.props.btnEnabled) {
+            return (
+                <i className={this.props.classes} style={{ position: 'relative'  }}>
+                    <form action='#'>
+                        <input style={{ opacity: 0, zIndex: 2, left: 0, top: 0, width: '100%', position: 'absolute' }}
+                               ref="fileUpload"
+                               type="file"
+                               accept="image/*"
+                               onChange={this._onFileChange}/>
+                    </form>
+                    <canvas ref="imageCanvas" style={{ display: 'none' }}></canvas>
+                </i>
+            );
+        } else {
+            return (
+                <i className={this.props.classes} style={{ position: 'relative'  }}>
+                </i>
+            );
+        }
     }
 });
 
@@ -1925,12 +1950,21 @@ var IconButton = React.createClass({
 
 var HistoryButton = React.createClass({
     render: function() {
-        return (
-            <button onClick={this.props.onClick} className={this.props.classes}>
-                <i className={this.props.icons}></i>
-                &nbsp;&nbsp;{this.props.title || ''}
-            </button>
-        );
+        if(this.props.btnEnabled) {
+            return (
+                <button onClick={this.props.onClick} className={this.props.classes}>
+                    <i className={this.props.icons}></i>
+                    &nbsp;&nbsp;{this.props.title || ''}
+                </button>
+            );
+        }else{
+            return (
+                <button disabled="disabled" className={this.props.classes}>
+                    <i className={this.props.icons}></i>
+                    &nbsp;&nbsp;{this.props.title || ''}
+                </button>
+            );
+        }
     }
 });
 
@@ -2034,15 +2068,24 @@ var HistoryBox = React.createClass({
     componentDidUpdate: function() {
         this._scrollToFirstUnread();
     },
+    _renderLoadHistoryButton: function(){
+        if(this.props.operator.status == 'online') {
+            return (
+                <LoadMessageHistoryButton status={this.props.contact.loadStatus}
+                                          onClick={this._onLoadHistory}
+                                          title={"Load history"}
+                                          titleLoading={"Loading..."}/>
+            );
+        }else{
+            return null;
+        }
+    },
     render: function() {
         var renderMessage = this.renderMessage;
         var firstUnreadMsgId = this.props.firstUnreadMsgId;
         return (
             <div className="chat-history">
-                <LoadMessageHistoryButton status={this.props.contact.loadStatus}
-                                          onClick={this._onLoadHistory}
-                                          title={"Load history"}
-                                          titleLoading={"Loading..."}/>
+                {this._renderLoadHistoryButton()}
 
                 <ul className="chat-history-messages">
                     {
@@ -2155,9 +2198,12 @@ var FooterBox = React.createClass({
         };
         ChatActions.outgoingMessage(msg);
     },
-    render: function() {
-        return (
-            <div className="chat-message clearfix">
+    _operatorOnline: function(){
+        return this.props.operator.status == 'online';
+    },
+    _getTextArea: function(){
+        if(this._operatorOnline()) {
+            return (
                 <textarea name="message-to-send"
                           id="message-to-send"
                           placeholder="Type your message"
@@ -2165,10 +2211,32 @@ var FooterBox = React.createClass({
                           onChange={this.handleChange}
                           onKeyUp={this.handleKeyUp}
                           rows="2"/>
-                <IconButton classes="fa fa-file-o"/>&nbsp;&nbsp;&nbsp;
-                <UploadImageButton onImageBase64={this._onImageUpload} classes="fa fa-file-image-o"/>
-                <HistoryButton onClick={this.sendMessage} title="send" icons="fa fa-paper-plane-o" classes="btn-send"/>
-                <HistoryButton onClick={this.sendEndMessage} title="end" icons="fa fa-comments" classes="btn-replied"/>
+            );
+        }
+        return (
+            <textarea disabled="disabled"
+                      name="message-to-send"
+                      id="message-to-send"
+                      placeholder="Type your message"
+                      value={this.state.value}
+                      rows="2"/>
+        );
+    },
+    render: function() {
+        return (
+            <div className="chat-message clearfix">
+                {this._getTextArea()}
+                <IconButton btnEnabled={this._operatorOnline()}
+                            classes="fa fa-file-o"/>&nbsp;&nbsp;&nbsp;
+                <UploadImageButton btnEnabled={this._operatorOnline()}
+                                   onImageBase64={this._onImageUpload}
+                                   classes="fa fa-file-image-o"/>
+                <HistoryButton btnEnabled={this._operatorOnline()}
+                               onClick={this.sendMessage}
+                               title="send" icons="fa fa-paper-plane-o" classes="btn-send"/>
+                <HistoryButton btnEnabled={this._operatorOnline()}
+                               onClick={this.sendEndMessage}
+                               title="end" icons="fa fa-comments" classes="btn-replied"/>
             </div>
         );
     }
@@ -2277,14 +2345,18 @@ var ConversationBox = React.createClass({
     render: function() {
         return (
             <div className="chat">
-                <HeaderBox contact={this.props.contact} count={this.props.messages.length}
+                <HeaderBox contact={this.props.contact}
+                           count={this.props.messages.length}
                            onClose={this._onClose}
                            onMinimize={this._onMinimize}/>
                 <HistoryBox contact={this.props.contact}
+                            operator={this.props.operator}
                             firstUnreadMsgId={this.props.firstUnreadMsgId}
                             messages={this.props.messages}
                             onLoadHistory={this._onLoadHistory}/>
-                <FooterBox operator={this.props.operator} contact={this.props.contact} onMessage={this._onOutMessage}/>
+                <FooterBox operator={this.props.operator}
+                           contact={this.props.contact}
+                           onMessage={this._onOutMessage}/>
             </div>
         );
     }
@@ -2520,12 +2592,14 @@ var ChatBox = React.createClass({
     _onSelectContact: function(contact){
         ChatActions.clickContact(contact.name);
         ChatActions.readMessages(contact.name);
-        if(contact.loadStatus == 'init') {
-            var firstMsgId = MessageStore.getFirstMessageId(contact.name);
-            ChatActions.fetchContactHistory(contact, firstMsgId);
-        }else{
-            var lastMsgId = MessageStore.getLastMessageId(contact.name);
-            ChatActions.fetchNewestContactHistory(contact, lastMsgId);
+        if(this.state.operator.status == 'online') {
+            if (contact.loadStatus == 'init') {
+                var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+                ChatActions.fetchContactHistory(contact, firstMsgId);
+            } else {
+                var lastMsgId = MessageStore.getLastMessageId(contact.name);
+                ChatActions.fetchNewestContactHistory(contact, lastMsgId);
+            }
         }
     },
 

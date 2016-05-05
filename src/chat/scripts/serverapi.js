@@ -65,6 +65,7 @@ function OkkChatReady(OkkChatApi) {
                 console.log('disconnect!!!');
                 ServerAPI._needUpdateClientsList = true;
                 OkkChatApi.Actions.operatorStatusChanged('offline');
+                OkkChatApi.Stores.ContactsStore.makeAllOffline();
             });
 
             socket.on('incoming:message', function (response) {
@@ -134,13 +135,29 @@ function OkkChatReady(OkkChatApi) {
             });
         },
         loadNewestMessagesForCurrentContact: function(){
-            var searchRegex = /m_|temp_/i;
+            var searchRegex = /m_/i;
             var contact =  OkkChatApi.Stores.ContactsStore.getCurrentContact();
             if(contact) {
                 var lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
-                var normalizedMessageId = +((""+lastMsgId).replace(searchRegex, ''));
-                if(lastMsgId) {
+                var strLastMsgId = (""+lastMsgId);
+                var normalizedMessageId = +(strLastMsgId.replace(searchRegex, ''));
+                var submitted = strLastMsgId.indexOf('temp_') == -1;
+                if(submitted && lastMsgId) {
                     ServerAPI.loadNewestRawContactMessages(contact.name, normalizedMessageId);
+                }else{
+                    (function() {
+                        var intervalId = setInterval(function () {
+                            var msg = OkkChatApi.Stores.MessageStore.getMessage(this.contact.name, this.lastMsgId);
+                            if(!msg){
+                                clearInterval(intervalId);
+                            }
+                            if(msg && (""+msg.id).indexOf('temp_') == -1){
+                                clearInterval(intervalId);
+                                OkkChatApi.Stores.MessageStore.clearMessages(this.contact.name);
+                                ServerAPI.loadRawContactMessages(contact.name, null);
+                            }
+                        }.bind({contact: contact, lastMsgId: lastMsgId}), 1000);
+                    })()
                 }
             }
         },
@@ -203,7 +220,7 @@ function OkkChatReady(OkkChatApi) {
             if(unreadIds && unreadIds.length){
                 var unreadedMsgIds = [];
                 for(var i=0; i<unreadIds.length; i++){
-                    unreadedMsgIds.push(+unreadIds[i].replace(/(m_|temp_)/gi, ''))
+                    unreadedMsgIds.push(+unreadIds[i].replace(/m_/gi, ''))
                 }
                 return {messageIds:unreadedMsgIds};
             }
