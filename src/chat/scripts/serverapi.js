@@ -68,9 +68,13 @@ function OkkChatReady(OkkChatApi) {
                 OkkChatApi.Stores.ContactsStore.makeAllOffline();
             });
 
-            socket.on('incoming:message', function (response) {
+            socket.on('incoming:message', function (response, sendAck) {
                 var message = JSON.parse(response);
-                OkkChatApi.Actions.incomingMessage(message)
+                if(typeof sendAck == 'function'){
+                    var currentOperator = OkkChatApi.Stores.AuthStore.getOperator();
+                    sendAck(JSON.stringify({id:+message.id, deliveredTo: currentOperator.nick}));
+                }
+                OkkChatApi.Actions.incomingMessage(message);
             });
 
 
