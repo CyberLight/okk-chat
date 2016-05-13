@@ -202,7 +202,7 @@ var CoreUtils = {
             endOfConversation: raw.endOfConversation,
             fullImageUrl: raw.fullImageUrl,
             sending: raw.sending || false,
-            isRead: !!raw.delivered,
+            isRead: !!raw.isReadByOperator,
             delivered: !!raw.delivered
         };
 
@@ -409,6 +409,7 @@ var ChatActions = {
                     fullImage: null,
                     fullImageUrl: msg.fullImageUrl,
                     operator: msg.operator,
+                    isReadByOperator: msg.isReadByOperator,
                     operatorName: msg.operatorName
                 },
                 operator: AuthStore.getOperator()
@@ -428,6 +429,7 @@ var ChatActions = {
                     fullImage: null,
                     fullImageUrl: null,
                     operator: msg.operator,
+                    isReadByOperator: msg.isReadByOperator,
                     operatorName: msg.operatorName
                 },
                 operator: AuthStore.getOperator()
@@ -639,6 +641,10 @@ var UnreadMessageStore = objectAssign({}, EventEmitter.prototype, {
         return messages.length;
     },
 
+    getUnreadIds: function(id) {
+        return this._getUnreadMessageIds(id);
+    },
+
     getAll: function(){
         var allCount = 0;
         var keys = Object.keys(_messages);
@@ -706,7 +712,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
 
             historyMessages[message.id] = message;
 
-            if(!message.delivered) {
+            if(!message.isRead) {
                 unreaded.push(message.id);
             }
         }
@@ -881,9 +887,12 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             var message = messages[unreadIds[i]];
             message.isRead = true;
         }
-
-        _messages[id].unreadIds = [];
         return readed;
+    },
+    clearUnreadMessages: function(contactId) {
+        if(_messages[contactId]) {
+            _messages[contactId].unreadIds = [];
+        }
     },
     clearMessages: function(contactId){
         _messages[contactId].messages = [];
@@ -1065,9 +1074,11 @@ ContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
     ]);
     switch (action.type) {
         case ActionTypes.CLICK_CONTACT:
-            var changed = ContactsStore.setActive(action.contactId);
-            if(changed) {
-                ContactsStore.emitContactSelect();
+            if(action.changed) {
+                var changed = ContactsStore.setActive(action.contactId);
+                if (changed) {
+                    ContactsStore.emitContactSelect();
+                }
             }
             break;
 
