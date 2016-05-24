@@ -146,7 +146,7 @@ function OkkChatReady(OkkChatApi) {
             if(contact) {
                 var unsentMessages = OkkChatApi.Stores.MessageStore.getUnsentMessages(contact.name);
                 if(unsentMessages && !unsentMessages.length) {
-                    lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
+                    lastMsgId = OkkChatApi.Stores.MessageStore.getLastDeliveredMessageId(contact.name);
                     ServerAPI.loadNewestRawContactMessages(contact.name, lastMsgId);
                 }else{
                     lastMsgId = OkkChatApi.Stores.MessageStore.getLastDeliveredMessageId(contact.name);
@@ -207,14 +207,23 @@ function OkkChatReady(OkkChatApi) {
                 var historyData = history.data;
                 for(var i=0, len=historyData.length; i<len; i++){
                     var message = historyData[i];
-                    if(!OkkChatApi.Stores.MessageStore._updateExisted(contactId, message)){
+                    var updateFlag = OkkChatApi.Stores.MessageStore._updateExisted(contactId, message);
+                    if(updateFlag == OkkChatApi.ChatMessageUpdateStatus.NOT_UPDATED){
                         unreadIds.push(message.id);
                         newMessages.push(message);
                     }
-                    OkkChatApi.Stores.MessageStore._unregisterOutMessage(history.contact, message.tempId);
+                    if(updateFlag == OkkChatApi.ChatMessageUpdateStatus.UPDATED_WITH_TEMP_ID) {
+                        OkkChatApi.Stores.MessageStore._unregisterOutMessage(history.contact, message.tempId);
+                    }
                 }
                 OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, newMessages, true);
                 data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+
+                var unsentMessages = OkkChatApi.Stores.MessageStore.getUnsentMessages(history.contact);
+                for(var mIndex=0, lenUnsent=unsentMessages.length; mIndex<lenUnsent; mIndex++) {
+                    ServerAPI.sendMessageToServer(unsentMessages[mIndex]);
+                }
+
                 if(data.messageIds.length) {
                     ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){});
                 }

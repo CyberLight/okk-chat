@@ -34,6 +34,13 @@ var MessageTypes = {
     OUTGOING: 'out'
 };
 
+var ChatMessageUpdateStatus = {
+    NOT_UPDATED: 0,
+    UPDATED_WITH_DB_ID: 1,
+    UPDATED_WITH_TEMP_ID: 2
+};
+
+
 var ChatConstants = keyMirror({
     MESSAGE_CHANGE_EVENT: null,
     CONTACT_SELECT_EVENT: null,
@@ -494,12 +501,10 @@ var ChatActions = {
     },
 
     fetchContactHistory: function(contact, firstMessageId){
-        var searchRegex = /m_|temp_/i;
-        var normalizedMessageId = firstMessageId && +((""+firstMessageId).replace(searchRegex, ''));
         ChatDispatcher.dispatch({
            type: ActionTypes.API_FETCH_CONTACT_HISTORY,
            contact: contact,
-           firstMessageId: normalizedMessageId
+           firstMessageId: firstMessageId
         });
     },
 
@@ -685,18 +690,23 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
     _updateExisted: function(contactName, rawMessage){
         var allMessages = _messages[contactName].messages;
         if(!allMessages){
-            return false;
+            return ChatMessageUpdateStatus.NOT_UPDATED;
         }
         var message = allMessages["m_"+rawMessage.id];
         if(!message){
             message = allMessages[rawMessage.tempId];
+        }else{
+            message.id = rawMessage.id;
+            message.sending = false;
+            return ChatMessageUpdateStatus.UPDATED_WITH_DB_ID;
         }
+
         if(!message){
             return false;
         }
         message.id = rawMessage.id;
         message.sending = false;
-        return true;
+        return ChatMessageUpdateStatus.UPDATED_WITH_TEMP_ID;
     },
     getUnsentMessages: function(contactName){
         var messages = _chatOutMessages[contactName];
@@ -718,16 +728,6 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         var firstKey = keys[0];
         return messages[firstKey].id || null;
     },
-    getLastMessageId: function(contact){
-        var messages = _messages[contact].messages;
-        if (!messages) return null;
-
-        var keys = Object.keys(messages);
-        if (!keys.length) return null;
-
-        var lastKey = keys[keys.length-1];
-        return messages[lastKey].id || null;
-    },
     _clearMessageId: function(mId){
         var searchRegex = /m_|temp_/i;
         var normalizedMessageId = mId && +((""+mId).replace(searchRegex, ''));
@@ -735,17 +735,24 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
     },
     getLastDeliveredMessageId: function(contactName){
         var unsentMessages = this.getUnsentMessages(contactName);
+        var contactData = _messages[contactName];
+        if(!contactData) return 0;
+
+        var keys = Object.keys(contactData.messages);
         if(unsentMessages && unsentMessages.length > 0){
             var firstUnsentMsgId = unsentMessages[0].id;
-            var contactData = _messages[contactName];
             if (!contactData) return 0;
-            var keys = Object.keys(contactData.messages);
             var indexOfFirstUnsent = keys.indexOf(firstUnsentMsgId);
             var prevKeyIndex = indexOfFirstUnsent-1;
             if(prevKeyIndex < 0) return 0;
             return this._clearMessageId(contactData.messages[keys[prevKeyIndex]].id);
         }
-        return 0;
+
+        var lastIndex = keys.length - 1;
+        if(lastIndex < 0) return 0;
+
+        var lastKey = keys[lastIndex];
+        return this._clearMessageId(contactData.messages[lastKey].id);
     },
     getDbMessageId: function(contactId, messageId){
         var contactData = _messages[contactId];
@@ -2668,10 +2675,10 @@ var ChatBox = React.createClass({
         ChatActions.readMessages(contact.name);
         if(this.state.operator.status == 'online') {
             if (contact.loadStatus == 'init') {
-                var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+                var firstMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
                 ChatActions.fetchContactHistory(contact, firstMsgId);
             } else {
-                var lastMsgId = MessageStore.getLastMessageId(contact.name);
+                var lastMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
                 ChatActions.fetchNewestContactHistory(contact, lastMsgId);
             }
         }
@@ -2738,7 +2745,7 @@ var ChatBox = React.createClass({
         });
     },
     _onLoadHistory: function(contact){
-        var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+        var firstMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
         ChatActions.fetchContactHistory(contact, firstMsgId);
     },
     onOutgoingMessage: function(data){
@@ -2816,7 +2823,8 @@ var chatBox = ReactDOM.render(
                 },
                 MessageTypes: MessageTypes,
                 MessageContentTypes: MessageContentTypes,
-                CoreUtils: CoreUtils
+                CoreUtils: CoreUtils,
+                ChatMessageUpdateStatus: ChatMessageUpdateStatus
             };
             window.OkkChatReady(OkkChatApi);
         }
