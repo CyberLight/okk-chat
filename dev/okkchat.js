@@ -55,15 +55,13 @@ function OkkChatReady(OkkChatApi) {
                 self._socket = socket;
                 OkkChatApi.Actions.operatorStatusChanged('online');
                 if(!ServerAPI._firstConnection){
-                    ServerAPI.loadContacts();
-                    ServerAPI.loadNewestMessagesForCurrentContact();
+                    ServerAPI.loadContacts(ServerAPI.loadNewestMessagesForCurrentContact);
                 }
                 ServerAPI._firstConnection = false;
             });
 
             socket.on('disconnect', function(){
                 console.log('disconnect!!!');
-                ServerAPI._needUpdateClientsList = true;
                 OkkChatApi.Actions.operatorStatusChanged('offline');
                 OkkChatApi.Stores.ContactsStore.makeAllOffline();
             });
@@ -128,7 +126,7 @@ function OkkChatReady(OkkChatApi) {
                     }, 1000);
             });
         },
-        loadContacts: function () {
+        loadContacts: function (cb) {
             this._socket.emit('client:list', {}, function (jsonResponse) {
                 var response = JSON.parse(jsonResponse);
                 if(response.success) {
@@ -136,35 +134,40 @@ function OkkChatReady(OkkChatApi) {
                     OkkChatApi.Stores.ContactsStore.emitChange();
                     OkkChatApi.Stores.MessageStore.init(response.unread)
                 }
+                if(typeof cb == "function") {
+                    cb();
+                }
             });
         },
+
         loadNewestMessagesForCurrentContact: function(){
-            var searchRegex = /m_/i;
             var contact =  OkkChatApi.Stores.ContactsStore.getCurrentContact();
+            var lastMsgId = null;
             if(contact) {
-                var lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
-                var strLastMsgId = (""+lastMsgId);
-                var normalizedMessageId = +(strLastMsgId.replace(searchRegex, ''));
-                var submitted = strLastMsgId.indexOf('temp_') == -1;
-                if(submitted && lastMsgId) {
-                    ServerAPI.loadNewestRawContactMessages(contact.name, normalizedMessageId);
+                var unsentMessages = OkkChatApi.Stores.MessageStore.getUnsentMessages(contact.name);
+                if(unsentMessages && !unsentMessages.length) {
+                    lastMsgId = OkkChatApi.Stores.MessageStore.getLastDeliveredMessageId(contact.name);
+                    ServerAPI.loadNewestRawContactMessages(contact.name, lastMsgId);
                 }else{
-                    (function() {
-                        var intervalId = setInterval(function () {
-                            var msg = OkkChatApi.Stores.MessageStore.getMessage(this.contact.name, this.lastMsgId);
-                            if(!msg){
-                                clearInterval(intervalId);
-                            }
-                            if(msg && (""+msg.id).indexOf('temp_') == -1){
-                                clearInterval(intervalId);
-                                OkkChatApi.Stores.MessageStore.clearMessages(this.contact.name);
-                                ServerAPI.loadRawContactMessages(contact.name, null);
-                            }
-                        }.bind({contact: contact, lastMsgId: lastMsgId}), 1000);
-                    })()
+                    lastMsgId = OkkChatApi.Stores.MessageStore.getLastDeliveredMessageId(contact.name);
+                    ServerAPI.loadNewestRawContactMessages(contact.name, lastMsgId);
                 }
             }
         },
+
+        checkUnreadMessages: function(unsentMessages, cb){
+            if(unsentMessages && unsentMessages.length) {
+                ServerAPI._socket.emit('operator:check:messages', JSON.stringify(unsentMessages), cb);
+            }
+        },
+
+        sendReadEvent: function(unreadIds){
+            var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+            if(data.messageIds.length) {
+                ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){});
+            }
+        },
+
         loadRawContactMessages: function (contactId, firstMsgId) {
             var queryData = {mobile: contactId};
             if (firstMsgId){
@@ -182,11 +185,8 @@ function OkkChatReady(OkkChatApi) {
                     OkkChatApi.Stores.ContactsStore.setLoadedState(response.contact);
                     OkkChatApi.Stores.ContactsStore.emitContactSelect();
                     ServerAPI.popQueue(response.contact);
-                    var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
-                    if(data.messageIds.length) {
-                        this._socket.emit('operator:read:messages', JSON.stringify(data), function(data){
-                        });
-                    }
+                    this.sendReadEvent(unreadIds);
+                    OkkChatApi.Stores.MessageStore.clearUnreadMessages(response.contact);
                 }
             }.bind(this));
         },
@@ -198,18 +198,34 @@ function OkkChatReady(OkkChatApi) {
 
             this._socket.emit('operator:newest:message:history', JSON.stringify(queryData), function(jsonData){
                 var history = JSON.parse(jsonData);
-                var data = history.data;
                 var unreadIds = [];
-                var operator = OkkChatApi.Stores.AuthStore.getOperator();
-                for(var i=0, len=history.data.length; i<len; i++){
-                    var message = history.data[i];
-                    unreadIds.push(message.id);
+                if(!history.success) {
+                    return;
                 }
-                OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, data, true);
-                var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+                var newMessages = [];
+                var operator = OkkChatApi.Stores.AuthStore.getOperator();
+                var historyData = history.data;
+                for(var i=0, len=historyData.length; i<len; i++){
+                    var message = historyData[i];
+                    var updateFlag = OkkChatApi.Stores.MessageStore._updateExisted(contactId, message);
+                    if(updateFlag == OkkChatApi.ChatMessageUpdateStatus.NOT_UPDATED){
+                        unreadIds.push(message.id);
+                        newMessages.push(message);
+                    }
+                    if(updateFlag == OkkChatApi.ChatMessageUpdateStatus.UPDATED_WITH_TEMP_ID) {
+                        OkkChatApi.Stores.MessageStore._unregisterOutMessage(history.contact, message.tempId);
+                    }
+                }
+                OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, newMessages, true);
+                data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+
+                var unsentMessages = OkkChatApi.Stores.MessageStore.getUnsentMessages(history.contact);
+                for(var mIndex=0, lenUnsent=unsentMessages.length; mIndex<lenUnsent; mIndex++) {
+                    ServerAPI.sendMessageToServer(unsentMessages[mIndex]);
+                }
+
                 if(data.messageIds.length) {
-                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){
-                    });
+                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){});
                 }
                 ServerAPI.popQueue(history.contact);
             });
@@ -224,7 +240,9 @@ function OkkChatReady(OkkChatApi) {
             if(unreadIds && unreadIds.length){
                 var unreadedMsgIds = [];
                 for(var i=0; i<unreadIds.length; i++){
-                    unreadedMsgIds.push(+unreadIds[i].replace(/m_/gi, ''))
+                    if(+unreadIds[i]!=0) {
+                        unreadedMsgIds.push(+unreadIds[i].replace(/m_/gi, ''))
+                    }
                 }
                 return {messageIds:unreadedMsgIds};
             }
@@ -233,6 +251,8 @@ function OkkChatReady(OkkChatApi) {
     });
 
     ServerAPI.dispatchToken = OkkChatApi.Dispatcher.register(function (action) {
+        var contactId,
+            added = false;
         switch (action.type) {
             case OkkChatApi.ActionTypes.NEW_OUT_MESSAGE:
                 var msg = action.payload;
@@ -256,27 +276,37 @@ function OkkChatReady(OkkChatApi) {
                 ServerAPI.authenticate(action.credentials);
                 break;
             case OkkChatApi.ActionTypes.API_FETCH_CONTACT_HISTORY:
-                var contactId = action.contact.name;
-                var added = ServerAPI.pushQueue(contactId);
+                contactId = action.contact.name;
+                added = ServerAPI.pushQueue(contactId);
                 if(added) {
                     ServerAPI.loadRawContactMessages(contactId, action.firstMessageId);
                 }
                 break;
             case OkkChatApi.ActionTypes.API_FETCH_NEWEST_CONTACT_HISTORY:
-                var contactId = action.contact.name;
-                var added = ServerAPI.pushQueue(contactId);
+                contactId = action.contact.name;
+                added = ServerAPI.pushQueue(contactId);
                 if(added) {
                     ServerAPI.loadNewestRawContactMessages(contactId, action.lastMessageId);
                 }
                 break;
             case OkkChatApi.ActionTypes.NEW_IN_MESSAGE:
                 IncomingSoundManager.play();
+                var contact = OkkChatApi.Stores.ContactsStore.getCurrentContact();
+                var msg = action.payload;
+                if(msg.sender == contact.name) {
+                    ServerAPI.sendReadEvent([msg.id]);
+                }
                 break;
             case OkkChatApi.ActionTypes.MUTE_NOTIFICATION_SOUND:
                 IncomingSoundManager.mute();
                 break;
             case OkkChatApi.ActionTypes.UNMUTE_NOTIFICATION_SOUND:
                 IncomingSoundManager.unmute();
+                break;
+            case OkkChatApi.ActionTypes.READ_MESSAGES:
+                var unreadIds = OkkChatApi.Stores.UnreadMessageStore.getUnreadIds(action.contactId);
+                ServerAPI.sendReadEvent(unreadIds);
+                OkkChatApi.Stores.MessageStore.clearUnreadMessages(action.contactId);
                 break;
             default:
                 break;
@@ -288,6 +318,7 @@ var _messages = {};
 var _contacts = {};
 var _fullMessageImages = {};
 var _chatParticipants = {};
+var _chatOutMessages = {};
 
 var _activeContactId,
     _preActiveContactId,
@@ -317,6 +348,13 @@ var MessageTypes = {
     INCOMING: 'in',
     OUTGOING: 'out'
 };
+
+var ChatMessageUpdateStatus = {
+    NOT_UPDATED: 0,
+    UPDATED_WITH_DB_ID: 1,
+    UPDATED_WITH_TEMP_ID: 2
+};
+
 
 var ChatConstants = keyMirror({
     MESSAGE_CHANGE_EVENT: null,
@@ -487,7 +525,7 @@ var CoreUtils = {
             endOfConversation: raw.endOfConversation,
             fullImageUrl: raw.fullImageUrl,
             sending: raw.sending || false,
-            isRead: !!raw.delivered,
+            isRead: !!raw.isReadByOperator,
             delivered: !!raw.delivered
         };
 
@@ -694,6 +732,7 @@ var ChatActions = {
                     fullImage: null,
                     fullImageUrl: msg.fullImageUrl,
                     operator: msg.operator,
+                    isReadByOperator: msg.isReadByOperator,
                     operatorName: msg.operatorName
                 },
                 operator: AuthStore.getOperator()
@@ -713,6 +752,7 @@ var ChatActions = {
                     fullImage: null,
                     fullImageUrl: null,
                     operator: msg.operator,
+                    isReadByOperator: msg.isReadByOperator,
                     operatorName: msg.operatorName
                 },
                 operator: AuthStore.getOperator()
@@ -776,12 +816,10 @@ var ChatActions = {
     },
 
     fetchContactHistory: function(contact, firstMessageId){
-        var searchRegex = /m_|temp_/i;
-        var normalizedMessageId = firstMessageId && +((""+firstMessageId).replace(searchRegex, ''));
         ChatDispatcher.dispatch({
            type: ActionTypes.API_FETCH_CONTACT_HISTORY,
            contact: contact,
-           firstMessageId: normalizedMessageId
+           firstMessageId: firstMessageId
         });
     },
 
@@ -924,6 +962,10 @@ var UnreadMessageStore = objectAssign({}, EventEmitter.prototype, {
         return messages.length;
     },
 
+    getUnreadIds: function(id) {
+        return this._getUnreadMessageIds(id);
+    },
+
     getAll: function(){
         var allCount = 0;
         var keys = Object.keys(_messages);
@@ -945,6 +987,52 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             UnreadMessageStore.emitChange()
         }
     },
+    _registerOutMessage: function(msg){
+        var allMessages = _chatOutMessages[msg.receiver];
+        if(!allMessages) {
+            allMessages = {};
+        }
+
+        allMessages[msg.id] = msg;
+        _chatOutMessages[msg.receiver] = allMessages;
+    },
+    _unregisterOutMessage: function(receiver, messageId){
+        var allMessages = _chatOutMessages[receiver];
+        if(allMessages){
+            delete allMessages[messageId];
+        }
+    },
+    _updateExisted: function(contactName, rawMessage){
+        var allMessages = _messages[contactName].messages;
+        if(!allMessages){
+            return ChatMessageUpdateStatus.NOT_UPDATED;
+        }
+        var message = allMessages["m_"+rawMessage.id];
+        if(!message){
+            message = allMessages[rawMessage.tempId];
+        }else{
+            message.id = rawMessage.id;
+            message.sending = false;
+            return ChatMessageUpdateStatus.UPDATED_WITH_DB_ID;
+        }
+
+        if(!message){
+            return false;
+        }
+        message.id = rawMessage.id;
+        message.sending = false;
+        return ChatMessageUpdateStatus.UPDATED_WITH_TEMP_ID;
+    },
+    getUnsentMessages: function(contactName){
+        var messages = _chatOutMessages[contactName];
+        var result = [];
+        if(messages) {
+            for (var k in messages) {
+                result.push(messages[k]);
+            }
+        }
+        return result;
+    },
     getFirstMessageId: function(contact){
         var messages = _messages[contact].messages;
         if (!messages) return null;
@@ -955,15 +1043,31 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         var firstKey = keys[0];
         return messages[firstKey].id || null;
     },
-    getLastMessageId: function(contact){
-        var messages = _messages[contact].messages;
-        if (!messages) return null;
+    _clearMessageId: function(mId){
+        var searchRegex = /m_|temp_/i;
+        var normalizedMessageId = mId && +((""+mId).replace(searchRegex, ''));
+        return +normalizedMessageId;
+    },
+    getLastDeliveredMessageId: function(contactName){
+        var unsentMessages = this.getUnsentMessages(contactName);
+        var contactData = _messages[contactName];
+        if(!contactData) return 0;
 
-        var keys = Object.keys(messages);
-        if (!keys.length) return null;
+        var keys = Object.keys(contactData.messages);
+        if(unsentMessages && unsentMessages.length > 0){
+            var firstUnsentMsgId = unsentMessages[0].id;
+            if (!contactData) return 0;
+            var indexOfFirstUnsent = keys.indexOf(firstUnsentMsgId);
+            var prevKeyIndex = indexOfFirstUnsent-1;
+            if(prevKeyIndex < 0) return 0;
+            return this._clearMessageId(contactData.messages[keys[prevKeyIndex]].id);
+        }
 
-        var lastKey = keys[keys.length-1];
-        return messages[lastKey].id || null;
+        var lastIndex = keys.length - 1;
+        if(lastIndex < 0) return 0;
+
+        var lastKey = keys[lastIndex];
+        return this._clearMessageId(contactData.messages[lastKey].id);
     },
     getDbMessageId: function(contactId, messageId){
         var contactData = _messages[contactId];
@@ -991,7 +1095,7 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
 
             historyMessages[message.id] = message;
 
-            if(!message.delivered) {
+            if(!message.isRead) {
                 unreaded.push(message.id);
             }
         }
@@ -1166,9 +1270,12 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             var message = messages[unreadIds[i]];
             message.isRead = true;
         }
-
-        _messages[id].unreadIds = [];
         return readed;
+    },
+    clearUnreadMessages: function(contactId) {
+        if(_messages[contactId]) {
+            _messages[contactId].unreadIds = [];
+        }
     },
     clearMessages: function(contactId){
         _messages[contactId].messages = [];
@@ -1350,9 +1457,11 @@ ContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
     ]);
     switch (action.type) {
         case ActionTypes.CLICK_CONTACT:
-            var changed = ContactsStore.setActive(action.contactId);
-            if(changed) {
-                ContactsStore.emitContactSelect();
+            if(action.changed) {
+                var changed = ContactsStore.setActive(action.contactId);
+                if (changed) {
+                    ContactsStore.emitContactSelect();
+                }
             }
             break;
 
@@ -1425,6 +1534,7 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             if(outMsg.receiver == activeContactId) {
                 MessageStore.emitUpdate();
             }
+            MessageStore._registerOutMessage(outMsg);
             MessageStore.emitChange();
             break;
         case ActionTypes.NEW_IN_MESSAGE:
@@ -1445,6 +1555,7 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             var payload = action.payload;
             var data = payload.data;
             var msg = _messages[payload.receiver].messages[payload.tempMessageId];
+            MessageStore._unregisterOutMessage(payload.receiver, payload.tempMessageId);
             msg.id = data.id;
             msg.sending = false;
             if (data.contentType == MessageContentTypes.IMAGE) {
@@ -2879,10 +2990,10 @@ var ChatBox = React.createClass({displayName: "ChatBox",
         ChatActions.readMessages(contact.name);
         if(this.state.operator.status == 'online') {
             if (contact.loadStatus == 'init') {
-                var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+                var firstMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
                 ChatActions.fetchContactHistory(contact, firstMsgId);
             } else {
-                var lastMsgId = MessageStore.getLastMessageId(contact.name);
+                var lastMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
                 ChatActions.fetchNewestContactHistory(contact, lastMsgId);
             }
         }
@@ -2949,7 +3060,7 @@ var ChatBox = React.createClass({displayName: "ChatBox",
         });
     },
     _onLoadHistory: function(contact){
-        var firstMsgId = MessageStore.getFirstMessageId(contact.name);
+        var firstMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
         ChatActions.fetchContactHistory(contact, firstMsgId);
     },
     onOutgoingMessage: function(data){
@@ -3027,7 +3138,8 @@ var chatBox = ReactDOM.render(
                 },
                 MessageTypes: MessageTypes,
                 MessageContentTypes: MessageContentTypes,
-                CoreUtils: CoreUtils
+                CoreUtils: CoreUtils,
+                ChatMessageUpdateStatus: ChatMessageUpdateStatus
             };
             window.OkkChatReady(OkkChatApi);
         }
