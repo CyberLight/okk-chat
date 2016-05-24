@@ -139,31 +139,25 @@ function OkkChatReady(OkkChatApi) {
                 }
             });
         },
+
         loadNewestMessagesForCurrentContact: function(){
-            var searchRegex = /m_/i;
             var contact =  OkkChatApi.Stores.ContactsStore.getCurrentContact();
+            var lastMsgId = null;
             if(contact) {
-                var lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
-                var strLastMsgId = (""+lastMsgId);
-                var normalizedMessageId = +(strLastMsgId.replace(searchRegex, ''));
-                var submitted = ~strLastMsgId.indexOf('temp_');
-                if(submitted && lastMsgId) {
-                    ServerAPI.loadNewestRawContactMessages(contact.name, normalizedMessageId);
+                var unsentMessages = OkkChatApi.Stores.MessageStore.getUnsentMessages(contact.name);
+                if(unsentMessages && !unsentMessages.length) {
+                    lastMsgId = OkkChatApi.Stores.MessageStore.getLastMessageId(contact.name);
+                    ServerAPI.loadNewestRawContactMessages(contact.name, lastMsgId);
                 }else{
-                    (function() {
-                        var intervalId = setInterval(function () {
-                            var msg = OkkChatApi.Stores.MessageStore.getMessage(this.contact.name, this.lastMsgId);
-                            if(!msg){
-                                clearInterval(intervalId);
-                            }
-                            if(msg && (""+msg.id).indexOf('temp_') == -1){
-                                clearInterval(intervalId);
-                                OkkChatApi.Stores.MessageStore.clearMessages(this.contact.name);
-                                ServerAPI.loadRawContactMessages(contact.name, null);
-                            }
-                        }.bind({contact: contact, lastMsgId: lastMsgId}), 1000);
-                    })()
+                    lastMsgId = OkkChatApi.Stores.MessageStore.getLastDeliveredMessageId(contact.name);
+                    ServerAPI.loadNewestRawContactMessages(contact.name, lastMsgId);
                 }
+            }
+        },
+
+        checkUnreadMessages: function(unsentMessages, cb){
+            if(unsentMessages && unsentMessages.length) {
+                ServerAPI._socket.emit('operator:check:messages', JSON.stringify(unsentMessages), cb);
             }
         },
 
@@ -204,18 +198,25 @@ function OkkChatReady(OkkChatApi) {
 
             this._socket.emit('operator:newest:message:history', JSON.stringify(queryData), function(jsonData){
                 var history = JSON.parse(jsonData);
-                var data = history.data;
                 var unreadIds = [];
-                var operator = OkkChatApi.Stores.AuthStore.getOperator();
-                for(var i=0, len=history.data.length; i<len; i++){
-                    var message = history.data[i];
-                    unreadIds.push(message.id);
+                if(!history.success) {
+                    return;
                 }
-                OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, data, true);
-                var data = ServerAPI.getNormalizedUnreadIds(unreadIds);
+                var newMessages = [];
+                var operator = OkkChatApi.Stores.AuthStore.getOperator();
+                var historyData = history.data;
+                for(var i=0, len=historyData.length; i<len; i++){
+                    var message = historyData[i];
+                    if(!OkkChatApi.Stores.MessageStore._updateExisted(contactId, message)){
+                        unreadIds.push(message.id);
+                        newMessages.push(message);
+                    }
+                    OkkChatApi.Stores.MessageStore._unregisterOutMessage(history.contact, message.tempId);
+                }
+                OkkChatApi.Stores.MessageStore.addContactRawMessages(operator, history.contact, newMessages, true);
+                data = ServerAPI.getNormalizedUnreadIds(unreadIds);
                 if(data.messageIds.length) {
-                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){
-                    });
+                    ServerAPI._socket.emit('operator:read:messages', JSON.stringify(data), function(data){});
                 }
                 ServerAPI.popQueue(history.contact);
             });

@@ -3,6 +3,7 @@ var _messages = {};
 var _contacts = {};
 var _fullMessageImages = {};
 var _chatParticipants = {};
+var _chatOutMessages = {};
 
 var _activeContactId,
     _preActiveContactId,
@@ -666,6 +667,47 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
             UnreadMessageStore.emitChange()
         }
     },
+    _registerOutMessage: function(msg){
+        var allMessages = _chatOutMessages[msg.receiver];
+        if(!allMessages) {
+            allMessages = {};
+        }
+
+        allMessages[msg.id] = msg;
+        _chatOutMessages[msg.receiver] = allMessages;
+    },
+    _unregisterOutMessage: function(receiver, messageId){
+        var allMessages = _chatOutMessages[receiver];
+        if(allMessages){
+            delete allMessages[messageId];
+        }
+    },
+    _updateExisted: function(contactName, rawMessage){
+        var allMessages = _messages[contactName].messages;
+        if(!allMessages){
+            return false;
+        }
+        var message = allMessages["m_"+rawMessage.id];
+        if(!message){
+            message = allMessages[rawMessage.tempId];
+        }
+        if(!message){
+            return false;
+        }
+        message.id = rawMessage.id;
+        message.sending = false;
+        return true;
+    },
+    getUnsentMessages: function(contactName){
+        var messages = _chatOutMessages[contactName];
+        var result = [];
+        if(messages) {
+            for (var k in messages) {
+                result.push(messages[k]);
+            }
+        }
+        return result;
+    },
     getFirstMessageId: function(contact){
         var messages = _messages[contact].messages;
         if (!messages) return null;
@@ -685,6 +727,25 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
 
         var lastKey = keys[keys.length-1];
         return messages[lastKey].id || null;
+    },
+    _clearMessageId: function(mId){
+        var searchRegex = /m_|temp_/i;
+        var normalizedMessageId = mId && +((""+mId).replace(searchRegex, ''));
+        return +normalizedMessageId;
+    },
+    getLastDeliveredMessageId: function(contactName){
+        var unsentMessages = this.getUnsentMessages(contactName);
+        if(unsentMessages && unsentMessages.length > 0){
+            var firstUnsentMsgId = unsentMessages[0].id;
+            var contactData = _messages[contactName];
+            if (!contactData) return 0;
+            var keys = Object.keys(contactData.messages);
+            var indexOfFirstUnsent = keys.indexOf(firstUnsentMsgId);
+            var prevKeyIndex = indexOfFirstUnsent-1;
+            if(prevKeyIndex < 0) return 0;
+            return this._clearMessageId(contactData.messages[keys[prevKeyIndex]].id);
+        }
+        return 0;
     },
     getDbMessageId: function(contactId, messageId){
         var contactData = _messages[contactId];
@@ -1151,6 +1212,7 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             if(outMsg.receiver == activeContactId) {
                 MessageStore.emitUpdate();
             }
+            MessageStore._registerOutMessage(outMsg);
             MessageStore.emitChange();
             break;
         case ActionTypes.NEW_IN_MESSAGE:
@@ -1171,6 +1233,7 @@ MessageStore.dispatchToken = ChatDispatcher.register(function(action) {
             var payload = action.payload;
             var data = payload.data;
             var msg = _messages[payload.receiver].messages[payload.tempMessageId];
+            MessageStore._unregisterOutMessage(payload.receiver, payload.tempMessageId);
             msg.id = data.id;
             msg.sending = false;
             if (data.contentType == MessageContentTypes.IMAGE) {
