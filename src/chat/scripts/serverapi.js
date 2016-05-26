@@ -53,7 +53,7 @@ function OkkChatReady(OkkChatApi) {
             socket.on('connect', function(){
                 console.log('connected!!!');
                 self._socket = socket;
-                OkkChatApi.Actions.operatorStatusChanged('online');
+                OkkChatApi.Actions.operatorStatusChanged(OkkChatApi.ContactStatus.ONLINE);
                 if(!ServerAPI._firstConnection){
                     ServerAPI.loadContacts(ServerAPI.loadNewestMessagesForCurrentContact);
                 }
@@ -62,7 +62,7 @@ function OkkChatReady(OkkChatApi) {
 
             socket.on('disconnect', function(){
                 console.log('disconnect!!!');
-                OkkChatApi.Actions.operatorStatusChanged('offline');
+                OkkChatApi.Actions.operatorStatusChanged(OkkChatApi.ContactStatus.OFFLINE);
                 OkkChatApi.Stores.ContactsStore.makeAllOffline();
             });
 
@@ -109,7 +109,7 @@ function OkkChatReady(OkkChatApi) {
                             id: user.id,
                             name: user.first_name,
                             nick: user.username,
-                            status: 'online'
+                            status: OkkChatApi.ContactStatus.ONLINE
                         };
                         OkkChatApi.Actions.authSuccess(operator);
                         ServerAPI._connectToSocket();

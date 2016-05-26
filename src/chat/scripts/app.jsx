@@ -29,6 +29,11 @@ var MessageContentTypes = {
     TEXT: 'text'
 };
 
+var ContactStatus = {
+    ONLINE: 'online',
+    OFFLINE: 'offline'
+};
+
 var MessageTypes = {
     INCOMING: 'in',
     OUTGOING: 'out'
@@ -990,24 +995,32 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         return Object.keys(_contacts).length;
     },
     getAll: function(){
-        var result = [];
+        var online = [];
+        var other = [];
         if(_contactFilterPattern) {
             _preActiveContactId = _activeContactId;
             _activeContactId = null;
             for (var id in _contacts) {
                 var contact = _contacts[id];
                 if (contact.name.indexOf(_contactFilterPattern) >= 0) {
-                    result.push(contact);
+                    if(contact.status == ContactStatus.ONLINE){
+                        online.push(contact);
+                    }else{
+                        other.push(contact);
+                    }
                 }
             }
         }else{
             for (var id in _contacts) {
                 var contact = _contacts[id];
-                result.push(contact);
+                if(contact.status == ContactStatus.ONLINE){
+                    online.push(contact);
+                }else{
+                    other.push(contact);
+                }
             }
         }
-
-        return result;
+        return online.concat(other);
     },
 
     setFilter: function(pattern){
@@ -1084,7 +1097,7 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         var keys = Object.keys(_contacts);
         if(keys.length > 0){
             for(var i=0, len=keys.length; i<len; i++){
-                _contacts[keys[i]].status = 'offline';
+                _contacts[keys[i]].status = ContactStatus.OFFLINE;
             }
         }
         this.emitChange();
@@ -1326,7 +1339,7 @@ var OperatorInfo = React.createClass({
             <div className={"operator-info operator-" + this.state.operator.status}>
                 <MuteUnmuteButton muted={false} onChange={this._onMuteVolumeChange}/>
                 &nbsp;&nbsp;
-                <i className={"fa fa-circle " + this.state.operator.status || 'offline'}/>
+                <i className={"fa fa-circle " + this.state.operator.status || ContactStatus.OFFLINE}/>
                 &nbsp;&nbsp;
                 <b>{this.state.operator.name}</b> {"(" + this.state.operator.nick + ")"}
             </div>
@@ -1758,7 +1771,7 @@ var MinChatBox = React.createClass({
             <div className="chat-container min-container clearfix">
                 <div className={"msg-count center-text bg-"+this.props.status}>
                     <div className="status">
-                        <i className={"fa fa-circle " + this.props.status || 'offline' }></i>
+                        <i className={"fa fa-circle " + this.props.status || ContactStatus.OFFLINE }></i>
                         {this.props.status}
                     </div>
                     <div>Clients: <i className="clients-badge">{this.state.clientsCount}</i></div>
@@ -2150,7 +2163,7 @@ var HistoryBox = React.createClass({
         this._scrollToFirstUnread();
     },
     _renderLoadHistoryButton: function(){
-        if(this.props.operator.status == 'online') {
+        if(this.props.operator.status == ContactStatus.ONLINE) {
             return (
                 <LoadMessageHistoryButton status={this.props.contact.loadStatus}
                                           onClick={this._onLoadHistory}
@@ -2280,7 +2293,7 @@ var FooterBox = React.createClass({
         ChatActions.outgoingMessage(msg);
     },
     _operatorOnline: function(){
-        return this.props.operator.status == 'online';
+        return this.props.operator.status == ContactStatus.ONLINE;
     },
     _getTextArea: function(){
         if(this._operatorOnline()) {
@@ -2625,8 +2638,8 @@ var Contact = React.createClass({
                 <div className="about">
                     <div className="name">{this.props.data.name || '+000000000000'}</div>
                     <div className="status">
-                        <i className={"fa fa-circle " + this.props.data.status || 'offline' }></i>
-                        {this.props.data.status || 'offline'}
+                        <i className={"fa fa-circle " + this.props.data.status || ContactStatus.OFFLINE }></i>
+                        {this.props.data.status || ContactStatus.OFFLINE}
                     </div>
                     <div>
                         {this._getParticipants()}
@@ -2673,7 +2686,7 @@ var ChatBox = React.createClass({
     _onSelectContact: function(contact){
         ChatActions.clickContact(contact.name);
         ChatActions.readMessages(contact.name);
-        if(this.state.operator.status == 'online') {
+        if(this.state.operator.status == ContactStatus.ONLINE) {
             if (contact.loadStatus == 'init') {
                 var firstMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
                 ChatActions.fetchContactHistory(contact, firstMsgId);
@@ -2824,7 +2837,8 @@ var chatBox = ReactDOM.render(
                 MessageTypes: MessageTypes,
                 MessageContentTypes: MessageContentTypes,
                 CoreUtils: CoreUtils,
-                ChatMessageUpdateStatus: ChatMessageUpdateStatus
+                ChatMessageUpdateStatus: ChatMessageUpdateStatus,
+                ContactStatus: ContactStatus
             };
             window.OkkChatReady(OkkChatApi);
         }
