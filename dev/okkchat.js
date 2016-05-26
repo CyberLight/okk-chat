@@ -53,7 +53,7 @@ function OkkChatReady(OkkChatApi) {
             socket.on('connect', function(){
                 console.log('connected!!!');
                 self._socket = socket;
-                OkkChatApi.Actions.operatorStatusChanged('online');
+                OkkChatApi.Actions.operatorStatusChanged(OkkChatApi.ContactStatus.ONLINE);
                 if(!ServerAPI._firstConnection){
                     ServerAPI.loadContacts(ServerAPI.loadNewestMessagesForCurrentContact);
                 }
@@ -62,7 +62,7 @@ function OkkChatReady(OkkChatApi) {
 
             socket.on('disconnect', function(){
                 console.log('disconnect!!!');
-                OkkChatApi.Actions.operatorStatusChanged('offline');
+                OkkChatApi.Actions.operatorStatusChanged(OkkChatApi.ContactStatus.OFFLINE);
                 OkkChatApi.Stores.ContactsStore.makeAllOffline();
             });
 
@@ -109,7 +109,7 @@ function OkkChatReady(OkkChatApi) {
                             id: user.id,
                             name: user.first_name,
                             nick: user.username,
-                            status: 'online'
+                            status: OkkChatApi.ContactStatus.ONLINE
                         };
                         OkkChatApi.Actions.authSuccess(operator);
                         ServerAPI._connectToSocket();
@@ -342,6 +342,11 @@ var keyMirror = function(obj) {
 var MessageContentTypes = {
     IMAGE: 'image',
     TEXT: 'text'
+};
+
+var ContactStatus = {
+    ONLINE: 'online',
+    OFFLINE: 'offline'
 };
 
 var MessageTypes = {
@@ -1305,24 +1310,32 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         return Object.keys(_contacts).length;
     },
     getAll: function(){
-        var result = [];
+        var online = [];
+        var other = [];
         if(_contactFilterPattern) {
             _preActiveContactId = _activeContactId;
             _activeContactId = null;
             for (var id in _contacts) {
                 var contact = _contacts[id];
                 if (contact.name.indexOf(_contactFilterPattern) >= 0) {
-                    result.push(contact);
+                    if(contact.status == ContactStatus.ONLINE){
+                        online.push(contact);
+                    }else{
+                        other.push(contact);
+                    }
                 }
             }
         }else{
             for (var id in _contacts) {
                 var contact = _contacts[id];
-                result.push(contact);
+                if(contact.status == ContactStatus.ONLINE){
+                    online.push(contact);
+                }else{
+                    other.push(contact);
+                }
             }
         }
-
-        return result;
+        return online.concat(other);
     },
 
     setFilter: function(pattern){
@@ -1399,7 +1412,7 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         var keys = Object.keys(_contacts);
         if(keys.length > 0){
             for(var i=0, len=keys.length; i<len; i++){
-                _contacts[keys[i]].status = 'offline';
+                _contacts[keys[i]].status = ContactStatus.OFFLINE;
             }
         }
         this.emitChange();
@@ -1641,7 +1654,7 @@ var OperatorInfo = React.createClass({displayName: "OperatorInfo",
             React.createElement("div", {className: "operator-info operator-" + this.state.operator.status}, 
                 React.createElement(MuteUnmuteButton, {muted: false, onChange: this._onMuteVolumeChange}), 
                 "  ", 
-                React.createElement("i", {className: "fa fa-circle " + this.state.operator.status || 'offline'}), 
+                React.createElement("i", {className: "fa fa-circle " + this.state.operator.status || ContactStatus.OFFLINE}), 
                 "  ", 
                 React.createElement("b", null, this.state.operator.name), " ", "(" + this.state.operator.nick + ")"
             )
@@ -2073,7 +2086,7 @@ var MinChatBox = React.createClass({displayName: "MinChatBox",
             React.createElement("div", {className: "chat-container min-container clearfix"}, 
                 React.createElement("div", {className: "msg-count center-text bg-"+this.props.status}, 
                     React.createElement("div", {className: "status"}, 
-                        React.createElement("i", {className: "fa fa-circle " + this.props.status || 'offline'}), 
+                        React.createElement("i", {className: "fa fa-circle " + this.props.status || ContactStatus.OFFLINE}), 
                         this.props.status
                     ), 
                     React.createElement("div", null, "Clients: ", React.createElement("i", {className: "clients-badge"}, this.state.clientsCount))
@@ -2465,7 +2478,7 @@ var HistoryBox = React.createClass({displayName: "HistoryBox",
         this._scrollToFirstUnread();
     },
     _renderLoadHistoryButton: function(){
-        if(this.props.operator.status == 'online') {
+        if(this.props.operator.status == ContactStatus.ONLINE) {
             return (
                 React.createElement(LoadMessageHistoryButton, {status: this.props.contact.loadStatus, 
                                           onClick: this._onLoadHistory, 
@@ -2595,7 +2608,7 @@ var FooterBox = React.createClass({displayName: "FooterBox",
         ChatActions.outgoingMessage(msg);
     },
     _operatorOnline: function(){
-        return this.props.operator.status == 'online';
+        return this.props.operator.status == ContactStatus.ONLINE;
     },
     _getTextArea: function(){
         if(this._operatorOnline()) {
@@ -2940,8 +2953,8 @@ var Contact = React.createClass({displayName: "Contact",
                 React.createElement("div", {className: "about"}, 
                     React.createElement("div", {className: "name"}, this.props.data.name || '+000000000000'), 
                     React.createElement("div", {className: "status"}, 
-                        React.createElement("i", {className: "fa fa-circle " + this.props.data.status || 'offline'}), 
-                        this.props.data.status || 'offline'
+                        React.createElement("i", {className: "fa fa-circle " + this.props.data.status || ContactStatus.OFFLINE}), 
+                        this.props.data.status || ContactStatus.OFFLINE
                     ), 
                     React.createElement("div", null, 
                         this._getParticipants()
@@ -2988,7 +3001,7 @@ var ChatBox = React.createClass({displayName: "ChatBox",
     _onSelectContact: function(contact){
         ChatActions.clickContact(contact.name);
         ChatActions.readMessages(contact.name);
-        if(this.state.operator.status == 'online') {
+        if(this.state.operator.status == ContactStatus.ONLINE) {
             if (contact.loadStatus == 'init') {
                 var firstMsgId = MessageStore.getLastDeliveredMessageId(contact.name);
                 ChatActions.fetchContactHistory(contact, firstMsgId);
@@ -3139,7 +3152,8 @@ var chatBox = ReactDOM.render(
                 MessageTypes: MessageTypes,
                 MessageContentTypes: MessageContentTypes,
                 CoreUtils: CoreUtils,
-                ChatMessageUpdateStatus: ChatMessageUpdateStatus
+                ChatMessageUpdateStatus: ChatMessageUpdateStatus,
+                ContactStatus: ContactStatus
             };
             window.OkkChatReady(OkkChatApi);
         }
