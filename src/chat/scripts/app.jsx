@@ -2706,10 +2706,16 @@ var ChatBox = React.createClass({
     },
 
     _storeContactsChange: function(){
+        var chatState = this.state.chatState;
         var currentContact = ContactsStore.getCurrentContact();
         var name = currentContact && currentContact.name || null;
+
+        if(!currentContact && chatState != 'min'){
+            chatState = 'no-chat';
+        }
+
         this.setState({
-            chatState: currentContact ? 'chat' : 'no-chat',
+            chatState: chatState,
             currentContact: currentContact,
             messages: MessageStore.getMessages(name),
             firstUnreadMsgId: MessageStore.getFirstUnreadId(name),
