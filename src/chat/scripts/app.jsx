@@ -998,8 +998,6 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         var online = [];
         var other = [];
         if(_contactFilterPattern) {
-            _preActiveContactId = _activeContactId;
-            _activeContactId = null;
             for (var id in _contacts) {
                 var contact = _contacts[id];
                 if (contact.name.indexOf(_contactFilterPattern) >= 0) {
