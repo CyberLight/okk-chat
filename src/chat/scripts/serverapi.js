@@ -293,7 +293,7 @@ function OkkChatReady(OkkChatApi) {
                 IncomingSoundManager.play();
                 var contact = OkkChatApi.Stores.ContactsStore.getCurrentContact();
                 var msg = action.payload;
-                if(msg.sender == contact.name) {
+                if(contact && msg.sender == contact.name) {
                     ServerAPI.sendReadEvent([msg.id]);
                 }
                 break;
