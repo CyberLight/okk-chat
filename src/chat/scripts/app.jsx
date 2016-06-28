@@ -168,7 +168,7 @@ var CoreUtils = {
     },
     getCurrentTime: function (dt) {
         var resultDate = new Date(dt) || new Date();
-        return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        return CoreUtils.formatDate(resultDate);
     },
     formatDate: function(d){
         var dt;
@@ -1511,7 +1511,7 @@ var UnreadOutgoingMessage = React.createClass({
                 <span className="mark">New messages</span>
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {CoreUtils.getCurrentTime(this.props.data.date)}, { CoreUtils.timeSince(this.props.data.date) }
+                        {CoreUtils.getCurrentTime(this.props.data.date)}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.fromName || 'Empty sender'}
@@ -1583,7 +1583,7 @@ var UnreadIncomingMessage = React.createClass({
                         {this._operatorStatus()}
                     </span>
                     <span className="message-data-time">
-                        { CoreUtils.getCurrentTime(this.props.data.date) }, { CoreUtils.timeSince(this.props.data.date) }
+                        { CoreUtils.getCurrentTime(this.props.data.date) }
                     </span>
                 </div>
                 <div className={"message my-message" + this._operatorMsgClasses() }>
@@ -1626,7 +1626,7 @@ var UnreadEndConversationMessage = React.createClass({
                 <span className="mark">New messages</span>
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        { CoreUtils.getCurrentTime(this.props.data.date) }, { CoreUtils.timeSince(this.props.data.date) }
+                        { CoreUtils.getCurrentTime(this.props.data.date) }
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.fromName || 'Empty sender'}
@@ -1713,7 +1713,7 @@ var OutgoingMessage = React.createClass({
             <li className="clearfix">
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        {CoreUtils.getCurrentTime(this.props.data.date)}, { CoreUtils.timeSince(this.props.data.date) }
+                        {CoreUtils.getCurrentTime(this.props.data.date)}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.fromName || 'Empty sender'}
@@ -1988,7 +1988,7 @@ var IncomingMessage = React.createClass({
                         {this.operatorStatus()}
                     </span>
                     <span className="message-data-time">
-                        { CoreUtils.getCurrentTime(this.props.data.date)}, { CoreUtils.timeSince(this.props.data.date) }
+                        { CoreUtils.getCurrentTime(this.props.data.date)}
                     </span>
                 </div>
                 <div className={"message my-message" + this._operatorMsgClasses()}>
@@ -2355,7 +2355,7 @@ var EndConversationMessage = React.createClass({
             <li className="clearfix">
                 <div className="message-data align-right">
                     <span className="message-data-time">
-                        { CoreUtils.getCurrentTime(this.props.data.date)}, { CoreUtils.timeSince(this.props.data.date) }
+                        { CoreUtils.getCurrentTime(this.props.data.date)}
                     </span> &nbsp;&nbsp;
                     <span className="message-data-name">
                         {this.props.data.fromName || 'Empty sender'}
