@@ -994,6 +994,9 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     getCountAll: function(){
         return Object.keys(_contacts).length;
     },
+    getSearchPattern: function(){
+       return _contactFilterPattern;
+    },
     getAll: function(){
         var online = [];
         var other = [];
@@ -2484,7 +2487,7 @@ var ContactsListBox = React.createClass({
 var ContactSearchBox = React.createClass({
     getInitialState: function() {
         return {
-            value: ''
+            value: this.props.pattern || ''
         }
     },
     _handleChange: function(event){
@@ -2543,9 +2546,11 @@ var ContactsBox = React.createClass({
         }
     },
     render: function() {
+        var pattern = this.props.searchPattern || "";
         return (
             <div className="people-list" id="people-list">
                 <ContactSearchBox onLiveSearch={this._onLiveSearch}
+                                  pattern={pattern}
                                   onSearch={this._onSearch}
                                   onClear={this._onClear}/>
                 <OperatorInfo/>
@@ -2659,7 +2664,8 @@ var ChatBox = React.createClass({
             messages: [],
             currentContact: {},
             operator: {},
-            unread: 0
+            unread: 0,
+            searchPattern: ContactsStore.getSearchPattern()
         };
     },
 
@@ -2678,7 +2684,10 @@ var ChatBox = React.createClass({
     },
 
     _onAuthChanged: function(){
-        this.setState({operator: AuthStore.getOperator()});
+        this.setState({
+            operator: AuthStore.getOperator(),
+            searchPattern: ContactsStore.getSearchPattern()
+        });
     },
 
     _onSelectContact: function(contact){
@@ -2699,7 +2708,8 @@ var ChatBox = React.createClass({
         var contact = ContactsStore.getCurrentContact();
         this.setState({
             chatState: 'chat',
-            currentContact: contact
+            currentContact: contact,
+            searchPattern: ContactsStore.getSearchPattern()
         });
     },
 
@@ -2717,7 +2727,8 @@ var ChatBox = React.createClass({
             currentContact: currentContact,
             messages: MessageStore.getMessages(name),
             firstUnreadMsgId: MessageStore.getFirstUnreadId(name),
-            contacts: ContactsStore.getAll()
+            contacts: ContactsStore.getAll(),
+            searchPattern: ContactsStore.getSearchPattern()
         });
     },
 
@@ -2727,14 +2738,16 @@ var ChatBox = React.createClass({
             this.setState({
                 currentContact: currentContact,
                 messages: MessageStore.getMessages(currentContact.name),
-                firstUnreadMsgId: MessageStore.getFirstUnreadId(currentContact.name)
+                firstUnreadMsgId: MessageStore.getFirstUnreadId(currentContact.name),
+                searchPattern: ContactsStore.getSearchPattern()
             });
         }
     },
     authSuccess: function(operator){
         this.setState({
             operator: operator,
-            chatState: 'no-chat'
+            chatState: 'no-chat',
+            searchPattern: ContactsStore.getSearchPattern()
         });
         ChatActions.fetchContacts();
     },
@@ -2742,7 +2755,8 @@ var ChatBox = React.createClass({
         this.setState({
             chatState: 'no-chat',
             messages:[],
-            currentContact: {}
+            currentContact: {},
+            searchPattern: ContactsStore.getSearchPattern()
         });
         ChatActions.clearSelected();
     },
@@ -2750,7 +2764,8 @@ var ChatBox = React.createClass({
         this.setState({
             chatState: 'min',
             messages:[],
-            currentContact: {}
+            currentContact: {},
+            searchPattern: ContactsStore.getSearchPattern()
         });
         ChatActions.clearSelected();
     },
@@ -2758,7 +2773,8 @@ var ChatBox = React.createClass({
         this.setState({
             chatState: 'no-chat',
             messages:[],
-            currentContact: {}
+            currentContact: {},
+            searchPattern: ContactsStore.getSearchPattern()
         });
     },
     _onLoadHistory: function(contact){
@@ -2792,6 +2808,7 @@ var ChatBox = React.createClass({
                 return (
                     <div id="chat-template" className="chat-container clearfix">
                         <ContactsBox current={this.state.currentContact}
+                                     searchPattern={this.state.searchPattern}
                                      contacts={this.state.contacts}
                                      onSelectContact={this._onSelectContact}/>
                         <ConversationBox contact={this.state.currentContact}
@@ -2807,7 +2824,10 @@ var ChatBox = React.createClass({
             case 'no-chat':
                 return (
                     <div id="chat-template" className="chat-container clearfix">
-                        <ContactsBox  contacts={this.state.contacts} onSelectContact={this._onSelectContact}/>
+                        <ContactsBox
+                            searchPattern={this.state.searchPattern}
+                            contacts={this.state.contacts}
+                            onSelectContact={this._onSelectContact}/>
                         <EmptyConversationBox onMinimize={this._onMinimize}/>
                     </div>
                 )
