@@ -293,7 +293,7 @@ function OkkChatReady(OkkChatApi) {
                 IncomingSoundManager.play();
                 var contact = OkkChatApi.Stores.ContactsStore.getCurrentContact();
                 var msg = action.payload;
-                if(msg.sender == contact.name) {
+                if(contact && msg.sender == contact.name) {
                     ServerAPI.sendReadEvent([msg.id]);
                 }
                 break;
@@ -483,7 +483,7 @@ var CoreUtils = {
     },
     getCurrentTime: function (dt) {
         var resultDate = new Date(dt) || new Date();
-        return resultDate.toLocaleTimeString().replace(/([\d]+:[\d]{2})(:[\d]{2})(.*)/, "$1$3");
+        return CoreUtils.formatDate(resultDate);
     },
     formatDate: function(d){
         var dt;
@@ -1309,12 +1309,13 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     getCountAll: function(){
         return Object.keys(_contacts).length;
     },
+    getSearchPattern: function(){
+       return _contactFilterPattern;
+    },
     getAll: function(){
         var online = [];
         var other = [];
         if(_contactFilterPattern) {
-            _preActiveContactId = _activeContactId;
-            _activeContactId = null;
             for (var id in _contacts) {
                 var contact = _contacts[id];
                 if (contact.name.indexOf(_contactFilterPattern) >= 0) {
@@ -1828,7 +1829,7 @@ var UnreadOutgoingMessage = React.createClass({displayName: "UnreadOutgoingMessa
                 React.createElement("span", {className: "mark"}, "New messages"), 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                        CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
+                        CoreUtils.getCurrentTime(this.props.data.date)
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
@@ -1900,7 +1901,7 @@ var UnreadIncomingMessage = React.createClass({displayName: "UnreadIncomingMessa
                         this._operatorStatus()
                     ), 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
+                         CoreUtils.getCurrentTime(this.props.data.date) 
                     )
                 ), 
                 React.createElement("div", {className: "message my-message" + this._operatorMsgClasses()}, 
@@ -1943,7 +1944,7 @@ var UnreadEndConversationMessage = React.createClass({displayName: "UnreadEndCon
                 React.createElement("span", {className: "mark"}, "New messages"), 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
+                         CoreUtils.getCurrentTime(this.props.data.date) 
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
@@ -2030,7 +2031,7 @@ var OutgoingMessage = React.createClass({displayName: "OutgoingMessage",
             React.createElement("li", {className: "clearfix"}, 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                        CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
+                        CoreUtils.getCurrentTime(this.props.data.date)
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
@@ -2305,7 +2306,7 @@ var IncomingMessage = React.createClass({displayName: "IncomingMessage",
                         this.operatorStatus()
                     ), 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
+                         CoreUtils.getCurrentTime(this.props.data.date)
                     )
                 ), 
                 React.createElement("div", {className: "message my-message" + this._operatorMsgClasses()}, 
@@ -2672,7 +2673,7 @@ var EndConversationMessage = React.createClass({displayName: "EndConversationMes
             React.createElement("li", {className: "clearfix"}, 
                 React.createElement("div", {className: "message-data align-right"}, 
                     React.createElement("span", {className: "message-data-time"}, 
-                         CoreUtils.getCurrentTime(this.props.data.date), ", ",  CoreUtils.timeSince(this.props.data.date) 
+                         CoreUtils.getCurrentTime(this.props.data.date)
                     ), "   ", 
                     React.createElement("span", {className: "message-data-name"}, 
                         this.props.data.fromName || 'Empty sender', 
@@ -2801,7 +2802,7 @@ var ContactsListBox = React.createClass({displayName: "ContactsListBox",
 var ContactSearchBox = React.createClass({displayName: "ContactSearchBox",
     getInitialState: function() {
         return {
-            value: ''
+            value: this.props.pattern || ''
         }
     },
     _handleChange: function(event){
@@ -2860,9 +2861,11 @@ var ContactsBox = React.createClass({displayName: "ContactsBox",
         }
     },
     render: function() {
+        var pattern = this.props.searchPattern || "";
         return (
             React.createElement("div", {className: "people-list", id: "people-list"}, 
                 React.createElement(ContactSearchBox, {onLiveSearch: this._onLiveSearch, 
+                                  pattern: pattern, 
                                   onSearch: this._onSearch, 
                                   onClear: this._onClear}), 
                 React.createElement(OperatorInfo, null), 
@@ -2976,7 +2979,8 @@ var ChatBox = React.createClass({displayName: "ChatBox",
             messages: [],
             currentContact: {},
             operator: {},
-            unread: 0
+            unread: 0,
+            searchPattern: ContactsStore.getSearchPattern()
         };
     },
 
@@ -2995,7 +2999,10 @@ var ChatBox = React.createClass({displayName: "ChatBox",
     },
 
     _onAuthChanged: function(){
-        this.setState({operator: AuthStore.getOperator()});
+        this.setState({
+            operator: AuthStore.getOperator(),
+            searchPattern: ContactsStore.getSearchPattern()
+        });
     },
 
     _onSelectContact: function(contact){
@@ -3016,19 +3023,27 @@ var ChatBox = React.createClass({displayName: "ChatBox",
         var contact = ContactsStore.getCurrentContact();
         this.setState({
             chatState: 'chat',
-            currentContact: contact
+            currentContact: contact,
+            searchPattern: ContactsStore.getSearchPattern()
         });
     },
 
     _storeContactsChange: function(){
+        var chatState = this.state.chatState;
         var currentContact = ContactsStore.getCurrentContact();
         var name = currentContact && currentContact.name || null;
+
+        if(!currentContact && chatState != 'min'){
+            chatState = 'no-chat';
+        }
+
         this.setState({
-            chatState: currentContact ? 'chat' : 'no-chat',
+            chatState: chatState,
             currentContact: currentContact,
             messages: MessageStore.getMessages(name),
             firstUnreadMsgId: MessageStore.getFirstUnreadId(name),
-            contacts: ContactsStore.getAll()
+            contacts: ContactsStore.getAll(),
+            searchPattern: ContactsStore.getSearchPattern()
         });
     },
 
@@ -3038,14 +3053,16 @@ var ChatBox = React.createClass({displayName: "ChatBox",
             this.setState({
                 currentContact: currentContact,
                 messages: MessageStore.getMessages(currentContact.name),
-                firstUnreadMsgId: MessageStore.getFirstUnreadId(currentContact.name)
+                firstUnreadMsgId: MessageStore.getFirstUnreadId(currentContact.name),
+                searchPattern: ContactsStore.getSearchPattern()
             });
         }
     },
     authSuccess: function(operator){
         this.setState({
             operator: operator,
-            chatState: 'no-chat'
+            chatState: 'no-chat',
+            searchPattern: ContactsStore.getSearchPattern()
         });
         ChatActions.fetchContacts();
     },
@@ -3053,7 +3070,8 @@ var ChatBox = React.createClass({displayName: "ChatBox",
         this.setState({
             chatState: 'no-chat',
             messages:[],
-            currentContact: {}
+            currentContact: {},
+            searchPattern: ContactsStore.getSearchPattern()
         });
         ChatActions.clearSelected();
     },
@@ -3061,7 +3079,8 @@ var ChatBox = React.createClass({displayName: "ChatBox",
         this.setState({
             chatState: 'min',
             messages:[],
-            currentContact: {}
+            currentContact: {},
+            searchPattern: ContactsStore.getSearchPattern()
         });
         ChatActions.clearSelected();
     },
@@ -3069,7 +3088,8 @@ var ChatBox = React.createClass({displayName: "ChatBox",
         this.setState({
             chatState: 'no-chat',
             messages:[],
-            currentContact: {}
+            currentContact: {},
+            searchPattern: ContactsStore.getSearchPattern()
         });
     },
     _onLoadHistory: function(contact){
@@ -3103,6 +3123,7 @@ var ChatBox = React.createClass({displayName: "ChatBox",
                 return (
                     React.createElement("div", {id: "chat-template", className: "chat-container clearfix"}, 
                         React.createElement(ContactsBox, {current: this.state.currentContact, 
+                                     searchPattern: this.state.searchPattern, 
                                      contacts: this.state.contacts, 
                                      onSelectContact: this._onSelectContact}), 
                         React.createElement(ConversationBox, {contact: this.state.currentContact, 
@@ -3118,7 +3139,10 @@ var ChatBox = React.createClass({displayName: "ChatBox",
             case 'no-chat':
                 return (
                     React.createElement("div", {id: "chat-template", className: "chat-container clearfix"}, 
-                        React.createElement(ContactsBox, {contacts: this.state.contacts, onSelectContact: this._onSelectContact}), 
+                        React.createElement(ContactsBox, {
+                            searchPattern: this.state.searchPattern, 
+                            contacts: this.state.contacts, 
+                            onSelectContact: this._onSelectContact}), 
                         React.createElement(EmptyConversationBox, {onMinimize: this._onMinimize})
                     )
                 )
