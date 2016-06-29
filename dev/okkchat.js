@@ -2774,18 +2774,48 @@ var ConversationBox = React.createClass({displayName: "ConversationBox",
 
 
 var ContactsListBox = React.createClass({displayName: "ContactsListBox",
+    countPerLoad: 30,
+    getInitialState: function() {
+        return {
+            offset: 30
+        };
+    },
     onActivateContact: function(contact){
         if(typeof this.props.onSelectContact == 'function'){
             this.props.onSelectContact(contact);
         }
     },
+    _handleScroll: function () {
+        var node = ReactDOM.findDOMNode(this);
+        if(node.scrollTop == 0){
+            this.setState({
+                offset: 30
+            })
+        }
+        if(node.scrollTop + node.clientHeight ==  node.scrollHeight) {
+            var offsetNew = this.state.offset + this.countPerLoad;
+            if(offsetNew % this.props.items.length != offsetNew){
+                offsetNew = this.props.items.length;
+            }
+            this.setState({
+                offset: offsetNew
+            })
+        }
+    },
+    getItems: function(){
+        var toIndex = this.state.offset;
+        if(this.state.offset % this.props.items.length != this.state.offset){
+            toIndex = this.props.items.length;
+        }
+        return this.props.items && this.props.items.slice(0, toIndex) || [];
+    },
     render: function() {
         var selectedId = this.props.current ? this.props.current.name : null;
         var onActivateContact = this.onActivateContact;
         return (
-            React.createElement("ul", {className: "list"}, 
+            React.createElement("ul", {className: "list", onScroll: this._handleScroll}, 
                 
-                    this.props.items.map(function(contact){
+                    this.getItems().map(function(contact){
                         return (
                             React.createElement(Contact, {key: contact.id, 
                                      data: contact, 
