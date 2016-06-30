@@ -132,7 +132,7 @@ function OkkChatReady(OkkChatApi) {
                 if(response.success) {
                     OkkChatApi.Stores.ContactsStore.init(response.data);
                     OkkChatApi.Stores.ContactsStore.emitChange();
-                    OkkChatApi.Stores.MessageStore.init(response.unread)
+                    OkkChatApi.Stores.MessageStore.init(response.data);
                 }
                 if(typeof cb == "function") {
                     cb();
@@ -986,8 +986,16 @@ var MessageStore = objectAssign({}, EventEmitter.prototype, {
         if(unreadMessages && unreadMessages.length) {
             for (var j = 0, len = unreadMessages.length; j < len; j++) {
                 var unreadMsg = unreadMessages[j];
-                this.getMessages(unreadMsg.username);
-                _messages[unreadMsg.username].unreadIds = new Array(unreadMsg.unread + 1).join('0').split('');
+                var id = unreadMsg.username;
+                if(!_messages[id]){
+                    _messages[id] = {
+                        messages: {},
+                        unreadIds: [],
+                        firstUnreadMsgId: null,
+                        init: false
+                    };
+                }
+                _messages[id].unreadIds = new Array(unreadMsg.new_messages + 1).join('0').split('');
             }
             UnreadMessageStore.emitChange()
         }
@@ -1298,11 +1306,15 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         for(var i=0, len=rawContacts.length; i<len; i++){
             var rawContact = rawContacts[i];
             var oldStatus = _contacts[rawContact.username] && _contacts[rawContact.username].loadStatus || 'init';
+            var hasMessages = rawContact.messages_count && rawContact.messages_count > 0;
+            var hasNewMessages = rawContact.new_messages && rawContact.new_messages > 0;
             _contacts[rawContact.username] = {
                 id: rawContact.id,
                 name: rawContact.username,
                 status: rawContact.status,
-                loadStatus: oldStatus
+                loadStatus: oldStatus,
+                hasMessages: hasMessages,
+                hasNewMessages: hasNewMessages
             };
         }
     },
@@ -1312,16 +1324,24 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     getSearchPattern: function(){
        return _contactFilterPattern;
     },
+    _isContactInPriority: function(contact){
+        return contact.status == ContactStatus.ONLINE || contact.hasMessages;
+    },
     getAll: function(){
         var online = [];
         var other = [];
+        var active = [];
         if(_contactFilterPattern) {
             for (var id in _contacts) {
                 var contact = _contacts[id];
                 if (contact.name.indexOf(_contactFilterPattern) >= 0) {
-                    if(contact.status == ContactStatus.ONLINE){
+                    if (contact.hasNewMessages) {
+                        active.push(contact);
+                        continue;
+                    } else if(this._isContactInPriority(contact)) {
                         online.push(contact);
-                    }else{
+                        continue;
+                    }  else{
                         other.push(contact);
                     }
                 }
@@ -1329,14 +1349,18 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
         }else{
             for (var id in _contacts) {
                 var contact = _contacts[id];
-                if(contact.status == ContactStatus.ONLINE){
+                if (contact.hasNewMessages) {
+                    active.push(contact);
+                    continue;
+                } else if(this._isContactInPriority(contact)){
                     online.push(contact);
+                    continue;
                 }else{
                     other.push(contact);
                 }
             }
         }
-        return online.concat(other);
+        return active.concat(online.concat(other));
     },
 
     setFilter: function(pattern){
@@ -1417,6 +1441,16 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
             }
         }
         this.emitChange();
+    },
+    _setNewMessages: function(contactId){
+        if(contactId){
+            _contacts[contactId].hasNewMessages = true;
+        }
+    },
+    _clearNewMessages: function(contactId){
+        if(contactId){
+            _contacts[contactId].hasNewMessages = false;
+        }
     }
 });
 
@@ -1441,7 +1475,6 @@ AuthStore.dispatchToken = ChatDispatcher.register(function(action) {
             break;
         case ActionTypes.OPERATOR_STATUS_CHANGED:
             _currentOperator.status = action.payload.status;
-            AuthStore.emitChange();
             break;
         default:
             break;
@@ -1512,7 +1545,17 @@ ContactsStore.dispatchToken = ChatDispatcher.register(function(action) {
             }
             ContactsStore.emitChange();
             break;
-
+        case ActionTypes.NEW_IN_MESSAGE:
+            var message = action.payload;
+            var to = null;
+            if(message.operator){
+                to = message.receiver
+            }else{
+                to = message.sender
+            }
+            ContactsStore._setNewMessages(to);
+            ContactsStore.emitChange();
+            break;
         default:
             break;
     }
@@ -1596,6 +1639,7 @@ UnreadMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
     switch (action.type) {
         case ActionTypes.READ_MESSAGES:
             var readed = MessageStore.readMessages(action.contactId);
+            ContactsStore._clearNewMessages(action.contactId);
             if(readed) {
                 UnreadMessageStore.emitChange();
             }
@@ -2911,6 +2955,9 @@ var Contact = React.createClass({displayName: "Contact",
     getInitialState: function() {
         var unreadCount = UnreadMessageStore.getCount(this.props.data.name);
         var participants = ParticipantsStore.getParticipants(this.props.data.name);
+        if(unreadCount) {
+            ContactsStore._setNewMessages(this.props.data.name);
+        }
         return {
             active: false,
             unread: unreadCount,
@@ -2930,6 +2977,9 @@ var Contact = React.createClass({displayName: "Contact",
 
     _onUnreadChange: function(){
         var unread = UnreadMessageStore.getCount(this.props.data.name);
+        if(unread){
+            ContactsStore._setNewMessages(this.props.data.name);
+        }
         this.setState({
             unread: unread
         });
