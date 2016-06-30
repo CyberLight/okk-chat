@@ -132,7 +132,7 @@ function OkkChatReady(OkkChatApi) {
                 if(response.success) {
                     OkkChatApi.Stores.ContactsStore.init(response.data);
                     OkkChatApi.Stores.ContactsStore.emitChange();
-                    OkkChatApi.Stores.MessageStore.init(response.unread)
+                    OkkChatApi.Stores.MessageStore.init(response.data);
                 }
                 if(typeof cb == "function") {
                     cb();
