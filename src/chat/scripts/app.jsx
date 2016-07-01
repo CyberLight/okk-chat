@@ -2521,7 +2521,8 @@ var ContactsListBox = React.createClass({
                 offset: 30
             })
         }
-        if(node.scrollTop + node.clientHeight ==  node.scrollHeight) {
+        var deltaAccuracy = 5;
+        if(node.scrollTop + node.clientHeight >=  node.scrollHeight-deltaAccuracy) {
             var offsetNew = this.state.offset + this.countPerLoad;
             if(offsetNew % this.props.items.length != offsetNew){
                 offsetNew = this.props.items.length;
