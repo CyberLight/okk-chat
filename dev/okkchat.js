@@ -1324,11 +1324,8 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
     getSearchPattern: function(){
        return _contactFilterPattern;
     },
-    _isContactInPriority: function(contact){
-        return contact.status == ContactStatus.ONLINE || contact.hasMessages;
-    },
     getAll: function(){
-        var online = [];
+        var anymessages = [];
         var other = [];
         var active = [];
         if(_contactFilterPattern) {
@@ -1338,8 +1335,8 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
                     if (contact.hasNewMessages) {
                         active.push(contact);
                         continue;
-                    } else if(this._isContactInPriority(contact)) {
-                        online.push(contact);
+                    } else if(contact.hasMessages) {
+                        anymessages.push(contact);
                         continue;
                     }  else{
                         other.push(contact);
@@ -1352,15 +1349,15 @@ var ContactsStore = objectAssign({}, EventEmitter.prototype, {
                 if (contact.hasNewMessages) {
                     active.push(contact);
                     continue;
-                } else if(this._isContactInPriority(contact)){
-                    online.push(contact);
+                } else if(contact.hasMessages){
+                    anymessages.push(contact);
                     continue;
                 }else{
                     other.push(contact);
                 }
             }
         }
-        return active.concat(online.concat(other));
+        return active.concat(anymessages.concat(other));
     },
 
     setFilter: function(pattern){
@@ -2836,7 +2833,8 @@ var ContactsListBox = React.createClass({displayName: "ContactsListBox",
                 offset: 30
             })
         }
-        if(node.scrollTop + node.clientHeight ==  node.scrollHeight) {
+        var deltaAccuracy = 5;
+        if(node.scrollTop + node.clientHeight >=  node.scrollHeight-deltaAccuracy) {
             var offsetNew = this.state.offset + this.countPerLoad;
             if(offsetNew % this.props.items.length != offsetNew){
                 offsetNew = this.props.items.length;
