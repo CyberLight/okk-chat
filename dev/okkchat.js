@@ -1666,6 +1666,36 @@ UnreadMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 /*                 COMPONENTS                               */
 /************************************************************/
 
+var UnreadMessagesIndicator = React.createClass({displayName: "UnreadMessagesIndicator",
+    getInitialState: function(){
+        return {
+            unreadCount: UnreadMessageStore.getAll()
+        }
+    },
+    componentDidMount: function() {
+        UnreadMessageStore.addChangeListener(this._onUnreadChanged);
+    },
+    componentWillUnmount: function() {
+        UnreadMessageStore.removeChangeListener(this._onUnreadChanged);
+    },
+    _onUnreadChanged: function(){
+        this.setState({
+            unreadCount: UnreadMessageStore.getAll()
+        })
+    },
+    _getMuted: function(){
+        return this.state.unreadCount == 0 ? "muted" : "";
+    },
+    render: function() {
+        return (
+            React.createElement("div", {className: "unread-indicator"}, 
+                React.createElement("span", {className: "msg-badge unread " + this._getMuted()}, this.state.unreadCount), 
+                React.createElement("i", {className: "fa fa-comments"})
+            )
+        );
+    }
+});
+
 var OperatorInfo = React.createClass({displayName: "OperatorInfo",
     getInitialState: function(){
         return {
@@ -2941,6 +2971,7 @@ var ContactsBox = React.createClass({displayName: "ContactsBox",
                                   onSearch: this._onSearch, 
                                   onClear: this._onClear}), 
                 React.createElement(OperatorInfo, null), 
+                React.createElement(UnreadMessagesIndicator, null), 
                 React.createElement(ContactsListBox, {items: this.props.contacts, 
                                  current: this.props.current, 
                                  onSelectContact: this._onSelectContact})
