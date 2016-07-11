@@ -240,7 +240,7 @@
 .people-list ul.list {
     list-style: none;
     overflow-y: scroll;
-    height: 399px;
+    height: 373px;
 }
 
 .chat-history ul {
@@ -555,6 +555,18 @@
 
 .people-list .operator-info {
     padding-left: 28px;
+}
+
+.people-list .unread-indicator {
+    padding: 3px 0 3px 28px;
+}
+
+.people-list .unread-indicator span.unread {
+    margin-left: 0;
+}
+
+.people-list .unread-indicator span.unread.muted {
+    background-color: grey;
 }
 
 .people-list .operator-info.operator-online{

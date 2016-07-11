@@ -1351,6 +1351,36 @@ UnreadMessageStore.dispatchToken = ChatDispatcher.register(function(action) {
 /*                 COMPONENTS                               */
 /************************************************************/
 
+var UnreadMessagesIndicator = React.createClass({
+    getInitialState: function(){
+        return {
+            unreadCount: UnreadMessageStore.getAll()
+        }
+    },
+    componentDidMount: function() {
+        UnreadMessageStore.addChangeListener(this._onUnreadChanged);
+    },
+    componentWillUnmount: function() {
+        UnreadMessageStore.removeChangeListener(this._onUnreadChanged);
+    },
+    _onUnreadChanged: function(){
+        this.setState({
+            unreadCount: UnreadMessageStore.getAll()
+        })
+    },
+    _getMuted: function(){
+        return this.state.unreadCount == 0 ? "muted" : "";
+    },
+    render: function() {
+        return (
+            <div className="unread-indicator">
+                <span className={"msg-badge unread " + this._getMuted() }>{this.state.unreadCount}</span>
+                <i className="fa fa-comments"/>
+            </div>
+        );
+    }
+});
+
 var OperatorInfo = React.createClass({
     getInitialState: function(){
         return {
@@ -2626,6 +2656,7 @@ var ContactsBox = React.createClass({
                                   onSearch={this._onSearch}
                                   onClear={this._onClear}/>
                 <OperatorInfo/>
+                <UnreadMessagesIndicator/>
                 <ContactsListBox items={this.props.contacts}
                                  current={this.props.current}
                                  onSelectContact={this._onSelectContact}/>
